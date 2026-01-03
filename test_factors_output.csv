@@ -1,0 +1,31 @@
+Ticker,Momentum,Value,Quality,Volatility,Growth,Size
+SPY,"Ticker
+SPY    0.133575
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+SPY    0.196782
+Name: 2025-12-04 00:00:00, dtype: float64",,
+QQQ,"Ticker
+QQQ    0.208912
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+QQQ    0.238475
+Name: 2025-12-04 00:00:00, dtype: float64",,
+IWM,"Ticker
+IWM    0.041779
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+IWM    0.232235
+Name: 2025-12-04 00:00:00, dtype: float64",,
+EFA,"Ticker
+EFA    0.210128
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+EFA    0.167446
+Name: 2025-12-04 00:00:00, dtype: float64",,
+EEM,"Ticker
+EEM    0.251439
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+EEM    0.178616
+Name: 2025-12-04 00:00:00, dtype: float64",,
+TLT,"Ticker
+TLT   -0.056355
+Name: 2025-12-04 00:00:00, dtype: float64",,,"Ticker
+TLT    0.1239
+Name: 2025-12-04 00:00:00, dtype: float64",,

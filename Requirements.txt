@@ -1,0 +1,14 @@
+Package requirements:
+pandas>=1.5.0
+numpy>=1.25.0
+yfinance>=0.2.27
+plotly>=6.0.0
+ipywidgets>=8.0.0
+jupyterlab>=4.0.0 or notebook >=7.0.0
+
+
+yfinance 		- downloading stock/ETF data.
+pandas and numpy 	- data manipulation.
+plotly 			- interactive charts.
+ipywidgets 		- interactive input in the notebook.
+jupyterlab/notebook	- running the notebook.

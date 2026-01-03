@@ -1,0 +1,41 @@
+,Ticker,Momentum,Growth,Value,Sentiment,Risk
+0,VOO,0.16740416496114285,"Ticker
+VOO    0.144003
+dtype: float64",0.6424979497890422,0,"Ticker
+VOO    0.413745
+dtype: float64"
+1,SPY,0.1667402879802704,"Ticker
+SPY    0.143241
+dtype: float64",0.648780186201211,0,"Ticker
+SPY    0.415925
+dtype: float64"
+2,QQQ,0.25125617783418397,"Ticker
+QQQ    0.210599
+dtype: float64",0.5982842523866905,0,"Ticker
+QQQ    0.577328
+dtype: float64"
+3,IWM,0.10415682542285487,"Ticker
+IWM    0.034573
+dtype: float64",0.9351291553632929,0,"Ticker
+IWM    0.548075
+dtype: float64"
+4,EFA,0.1984190044251637,"Ticker
+EFA    0.242015
+dtype: float64",0.7800968583861309,0,"Ticker
+EFA    0.456057
+dtype: float64"
+5,EEM,0.22634454764494638,"Ticker
+EEM    0.293158
+dtype: float64",0.9716054147181121,0,"Ticker
+EEM    0.581848
+dtype: float64"
+6,TLT,0.02411270540586119,"Ticker
+TLT    0.031875
+dtype: float64",1.6726405022203465,0,"Ticker
+TLT    0.614098
+dtype: float64"
+7,GLD,0.5172745960898026,"Ticker
+GLD    0.582442
+dtype: float64",0.45411734573860824,0,"Ticker
+GLD    0.366028
+dtype: float64"
