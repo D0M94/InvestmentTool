@@ -1,4 +1,10 @@
-Package requirements:
+streamlit
+yfinance
+pandas
+plotly
+numpy
+
+Package version requirements:
 pandas>=1.5.0
 numpy>=1.25.0
 yfinance>=0.2.27

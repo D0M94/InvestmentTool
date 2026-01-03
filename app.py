@@ -3,6 +3,15 @@ import streamlit as st
 st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
 
 st.title("📊 Smart Money Tool: Find Winners & Beat Benchmarks")
+col1, col2 = st.columns([4, 1])
+with col1:
+    st.caption("⭐ Dom's Smart Money Tools - Built for serious investors")
+with col2:
+    st.button("⭐ Love it?", key="love")
+
+if st.button("💡 Quick Feedback (30 sec)"):
+    st.text_area("What rocks? What sucks? Would you pay $10/mo for insights, more models, portfolio builder, etc.?")
+
 st.markdown("""
 **Unlock your investment potential with Dom's Smart Money Tool.**  
 *Find the best assets to your portfolio. Invest like the pros.*
