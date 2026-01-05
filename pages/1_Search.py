@@ -1,10 +1,65 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import openai
+from openai import OpenAI
+
+# Initialize OpenAI (add your key to Streamlit secrets)
+client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", "your-key-here"))
+
+
+def ai_ticker_search(query):
+    """AI-powered ticker search - understands natural language"""
+    system_prompt = """You are a financial search expert. Given a query, return EXACTLY 15 valid stock/ETF tickers 
+    with their full names and type. Format each result as: TICKER|Name|Type|Exchange
+
+    Examples:
+    AAPL|Apple Inc|Stock|NASDAQ
+    QQQ|Invesco QQQ Trust|ETF|NASDAQ
+    SPY|SPDR S&P 500 ETF|ETF|NYSE
+
+    Rules:
+    - Only real, traded tickers (no made-up symbols)
+    - Prefer US-listed ETFs/Stocks
+    - For "Europe ETF" → VGK, IEUR, etc.
+    - For "tech" → QQQ, VGT, FTEC, etc.
+    - Always include major names (SPY, QQQ, AAPL, etc.)
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Cheap + fast
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Search: '{query}'. Return 15 results."}
+            ],
+            max_tokens=1000,
+            temperature=0.1  # Precise results
+        )
+
+        # Parse AI response
+        results = []
+        lines = response.choices[0].message.content.strip().split('\n')
+        for line in lines[:15]:
+            if '|' in line:
+                parts = [p.strip() for p in line.split('|')]
+                if len(parts) >= 3:
+                    results.append({
+                        "Symbol": parts[0],
+                        "Name": parts[1],
+                        "Type": parts[2],
+                        "Exchange": parts[3] if len(parts) > 3 else "N/A"
+                    })
+
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        st.error(f"AI search failed: {e}")
+        return pd.DataFrame()
 
 
 def render_search_tab():
-    st.header("🔍 Search for Assets")
+    st.header("🔍 AI-Powered Asset Search")
 
     # Initialize session state for search results
     if "search_results_df" not in st.session_state:
@@ -12,15 +67,15 @@ def render_search_tab():
     if "search_keyword" not in st.session_state:
         st.session_state.search_keyword = ""
 
-    # Better placeholder to encourage name searches
+    # Better placeholder - AI understands natural language
     keyword = st.text_input(
-        "Enter asset name or ticker:",
-        placeholder="Tesla, Apple, QQQ, Europe, Energy...",
+        "Enter asset name, theme, or description:",
+        placeholder="Tesla, tech ETFs, Europe stocks, dividend aristocrats, gold...",
         value=st.session_state.search_keyword
     )
 
     col1, col2 = st.columns([3, 1])
-    search_clicked = col1.button("Search")
+    search_clicked = col1.button("🔍 AI Search", type="primary")
     clear_clicked = col2.button("Clear")
 
     if clear_clicked:
@@ -33,44 +88,33 @@ def render_search_tab():
             st.warning("Please enter a search keyword.")
             return
 
-        try:
-            st.session_state.search_keyword = keyword
-            search_results = yf.Search(keyword, max_results=20).search()
-            quotes = search_results.quotes
+        with st.spinner(f"🤖 AI searching for '{keyword}'..."):
+            try:
+                st.session_state.search_keyword = keyword
+                df = ai_ticker_search(keyword)
 
-        except Exception as e:
-            st.error(f"Search failed: {e}")
-            return
+                if df.empty:
+                    st.info("🤔 AI couldn't find matches. Try: 'tech ETF', 'dividend stocks', exact tickers.")
+                    return
 
-        if not quotes:
-            st.info("No assets found. Try broader terms like 'Europe ETF' or exact tickers.")
-            return
+                df.set_index("Symbol", inplace=True)
+                st.session_state.search_results_df = df.head(15)
+                st.rerun()
 
-        df = pd.DataFrame([
-            {
-                "Symbol": q.get("symbol"),
-                "Name": q.get("shortname") or q.get("longname", ""),
-                "Type": q.get("quoteType", "").replace("EQUITY", "Stock").replace("ETF", "ETF"),
-                "Exchange": q.get("exchange", ""),
-            }
-            for q in quotes
-        ])
-
-        df.set_index("Symbol", inplace=True)
-        df = df.head(15)
-        st.session_state.search_results_df = df
-        st.rerun()
+            except Exception as e:
+                st.error(f"Search failed: {e}")
+                return
 
     # Show search results if available
     if not st.session_state.search_results_df.empty:
         df = st.session_state.search_results_df
-        st.subheader(f"Search Results for '{st.session_state.search_keyword}' ({len(df)} found)")
+        st.subheader(f"🤖 AI Results for '{st.session_state.search_keyword}' ({len(df)} found)")
         st.dataframe(df, use_container_width=True, hide_index=False)
 
         st.subheader("Load Selected Asset")
         chosen = st.selectbox("Select ticker to load:", df.index.tolist())
 
-        if st.button("Load Ticker"):
+        if st.button("📥 Load Ticker", type="secondary"):
             with st.spinner(f"Loading details for {chosen}..."):
                 try:
                     ticker = yf.Ticker(chosen)
@@ -118,7 +162,7 @@ def render_search_tab():
 
                         expense_ratio = info.get("netExpenseRatio", "N/A")
                         if isinstance(expense_ratio, (int, float)):
-                            expense_ratio = f"{(expense_ratio/100):.2%}"
+                            expense_ratio = f"{(expense_ratio / 100):.2%}"
 
                         asset_data.update({
                             "Expense Ratio": expense_ratio,
@@ -131,8 +175,10 @@ def render_search_tab():
                     st.session_state["selected_ticker"] = chosen
                     st.session_state["asset_details"] = asset_data
 
+                    st.success(f"✅ Loaded {asset_data['Name']} ({chosen})")
+
                     # Compact table solution
-                    with st.expander("Asset info", expanded=True):
+                    with st.expander("📋 Asset Details", expanded=True):
                         col1, col2 = st.columns(2)
                         for i, (key, value) in enumerate(asset_data.items()):
                             col = col1 if i % 2 == 0 else col2
@@ -142,7 +188,7 @@ def render_search_tab():
                     st.error(f"Failed to load details for {chosen}: {str(e)}")
                     st.session_state["selected_ticker"] = chosen
     else:
-        st.info("👆 Search for assets above to get started")
+        st.info("👆 Enter natural language search like 'tech ETFs' or 'dividend stocks' to get started!")
 
 
 render_search_tab()
