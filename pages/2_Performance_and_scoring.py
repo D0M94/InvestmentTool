@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import time
-import yfinance as yf
 from etf_loader import load_etfs
 from factor_engine_v2 import compute_factors
 from screener_engine_v2 import create_scorecard
@@ -10,16 +8,15 @@ from performance_analyzer import analyze_tickers
 
 st.title("📊 Asset Scoring & Performance Comparison")
 
-# RATE LIMIT FIX: Process ONE ticker at a time
 col1, col2 = st.columns(2)
 with col1:
-    tickers_input = st.text_input("Enter tickers (comma-separated)", "SPY,QQQ")
+    tickers_input = st.text_input("Enter tickers (comma-separated)", "SPY, URTH, QQQ, EEM")
     tickers = [t.strip().upper() for t in tickers_input.split(",") if t.strip()]
 with col2:
     benchmark_input = st.text_input("Benchmark", "SPY")
     benchmark = benchmark_input.strip().upper()
 
-period = st.selectbox("History period", ["1y", "2y"], index=0)  # Shorter periods = less data
+period = st.selectbox("History period", ["1y", "2y", "5y", "10y", "max"], index=2)
 rf_input = st.text_input("Risk-Free Rate", "2.00%")
 
 try:
@@ -29,111 +26,73 @@ except:
     st.stop()
 
 
-# **CRITICAL**: Rate limiting wrapper
-@st.cache_data(ttl=1800, max_entries=20)
-def safe_yf_data(tickers_list, period_data):
-    """Safe yfinance calls with delays"""
-    results = {}
-    for i, ticker in enumerate(tickers_list):
-        if ticker in results:
-            continue
-        try:
-            st.info(f"⏳ Loading {ticker} ({i + 1}/{len(tickers_list)})")
-            time.sleep(1)  # 1 second delay between requests
-            results[ticker] = yf.download(ticker, period=period_data, progress=False)
-        except:
-            st.warning(f"Failed to load {ticker}")
-    return results
-
-
 def highlight_benchmark(row):
     if row.name == benchmark:
         return ['background-color: #FFC39B'] * len(row)
     return [''] * len(row)
 
 
-if st.button("🚀 Analyze (Rate-Limit Safe)", type="primary"):
-    if len(tickers) > 3:
-        st.error("⚠️ Limit to 3 tickers max to avoid rate limits")
-        st.stop()
+if st.button("Analyze"):
+    with st.spinner("Loading data..."):
+        # Asset Scoring - TICKERS ONLY (no benchmark) - FIXED FORMATTING
+        factor_df = compute_factors(load_etfs(tickers, period=period), period=period)
+        scorecard = create_scorecard(factor_df)
 
-    with st.spinner("Loading data safely..."):
-        try:
-            # **FIX 1**: Load tickers ONE BY ONE with delays
-            all_tickers = list(set(tickers + [benchmark]))
-            ticker_data = safe_yf_data(all_tickers, period)
+        # FIXED: Format only numeric columns to 2 decimals
+        numeric_cols = scorecard.select_dtypes(include=['number']).columns
+        styled_scorecard = scorecard.style.format({col: "{:.2f}" for col in numeric_cols}).apply(highlight_benchmark,
+                                                                                                 axis=1)
 
-            # Check if we got data
-            valid_tickers = [t for t in all_tickers if not ticker_data[t].empty]
-            if len(valid_tickers) == 0:
-                st.error("❌ No data loaded. Try SPY, QQQ, AAPL")
-                st.stop()
+        st.subheader("Asset Scorecard")
+        st.dataframe(styled_scorecard, use_container_width=True, hide_index=False)
 
-            # **FIX 2**: Pass pre-loaded data to your functions
-            factor_df = compute_factors(
-                pd.concat([ticker_data[t] for t in tickers if not ticker_data[t].empty]),
-                period=period
-            )
+        # Performance Comparison - ALL TICKERS + BENCHMARK
+        all_tickers = list(set(tickers + [benchmark]))
+        cum_df, metrics = analyze_tickers(all_tickers, period=period, risk_free_rate=risk_free_rate)
 
-            # Scoring
-            scorecard = create_scorecard(factor_df)
-            numeric_cols = scorecard.select_dtypes(include=['number']).columns
-            styled_scorecard = scorecard.style.format(
-                {col: "{:.2f}" for col in numeric_cols}
-            ).apply(highlight_benchmark, axis=1)
+        st.subheader("Cumulative Performance")
+        fig = go.Figure()
 
-            st.subheader("🏆 Asset Scorecard")
-            st.dataframe(styled_scorecard, use_container_width=True)
-
-            # Performance charts
-            st.subheader("📈 Cumulative Performance")
-            fig = go.Figure()
-
-            cum_returns = {}
-            for t in tickers:
-                if t in ticker_data and not ticker_data[t].empty:
-                    cum_returns[t] = (1 + ticker_data[t]['Close'].pct_change()).cumprod()
-                    fig.add_trace(go.Scatter(
-                        x=cum_returns[t].index,
-                        y=cum_returns[t],
-                        mode="lines",
-                        name=t,
-                        line=dict(width=2)
-                    ))
-
-            if benchmark in ticker_data and not ticker_data[benchmark].empty:
-                cum_bench = (1 + ticker_data[benchmark]['Close'].pct_change()).cumprod()
+        for t in tickers:
+            if t in cum_df.columns:
                 fig.add_trace(go.Scatter(
-                    x=cum_bench.index,
-                    y=cum_bench,
-                    name=f"Benchmark ({benchmark})",
-                    line=dict(width=2, dash="dash", color="#ff9900")
+                    x=cum_df.index,
+                    y=cum_df[t],
+                    mode="lines",
+                    name=t,
+                    line=dict(width=1.5)
                 ))
 
-            fig.update_layout(height=500, template="plotly_white")
-            fig.update_yaxes(tickformat=".0%")
-            st.plotly_chart(fig, use_container_width=True)
+        if benchmark in cum_df.columns:
+            fig.add_trace(go.Scatter(
+                x=cum_df.index,
+                y=cum_df[benchmark],
+                mode="lines",
+                name=f"benchmark ({benchmark})",
+                line=dict(width=1.5, dash="dash", color="#FFC39B")
+            ))
 
-            # Metrics table
-            st.subheader("📊 Performance Metrics")
-            metrics_df = pd.DataFrame(analyze_tickers(valid_tickers, period=period, risk_free_rate=risk_free_rate)).T
+        fig.update_yaxes(tickformat=".1%")
+        #fig.update_layout(height=500, template="plotly_white", title="Cumulative Performance")
+        st.plotly_chart(fig, use_container_width=True)
 
-            pct_cols = ["Total Return", "Annual Return", "Annual Volatility"]
-            for col in pct_cols:
-                if col in metrics_df.columns:
-                    metrics_df[col] = metrics_df[col] * 100
+        st.subheader("Performance Metrics")
+        df = pd.DataFrame(metrics).T
+        pct_cols = ["Total Return", "Annual Return", "Annual Volatility"]
+        for col in pct_cols:
+            if col in df.columns:
+                df[col] = df[col] * 100
 
-            styled_metrics = metrics_df.style.format({
-                "Total Return": "{:.1f}%",
-                "Annual Return": "{:.1f}%",
-                "Annual Volatility": "{:.1f}%",
-                "Sharpe Ratio": "{:.2f}"
-            }).apply(highlight_benchmark, axis=1)
+        if benchmark in df.index:
+            benchmark_row = df.loc[benchmark].copy()
+            main_df = df.drop(benchmark).copy()
+            df = pd.concat([main_df, benchmark_row.to_frame().T])
 
-            st.dataframe(styled_metrics, use_container_width=True)
+        styled_df = df.style.format({
+            "Total Return": "{:.1f}%",
+            "Annual Return": "{:.1f}%",
+            "Annual Volatility": "{:.1f}%",
+            "Sharpe Ratio": "{:.2f}"
+        }).apply(highlight_benchmark, axis=1)
 
-        except Exception as e:
-            st.error(f"❌ Analysis failed: {str(e)}")
-            st.info("👉 Try fewer tickers (max 3) and shorter periods (1y, 2y)")
-
-st.info("💡 **Tips**: Use max 3 tickers, 1y/2y periods. SPY, QQQ, AAPL always work!")
+        st.dataframe(styled_df, use_container_width=True)
