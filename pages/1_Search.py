@@ -15,16 +15,21 @@ def search_financial_assets(query):
 
     try:
         response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raises exception for bad status codes
+
         data = response.json()
 
-        # **FIX**: Check if data is list before looping
+        # **IMPROVED**: Better error handling for FMP API responses
         if not isinstance(data, list):
-            st.error("Invalid API response - check your FMP_API_KEY")
+            st.error(f"Invalid API response: {data} - check your FMP_API_KEY")
+            return pd.DataFrame()
+
+        if len(data) == 0:
+            st.info("No results found for this query")
             return pd.DataFrame()
 
         results = []
         for item in data[:15]:
-            # **FIX**: Check each item is dict before .get()
             if not isinstance(item, dict):
                 continue
 
@@ -32,10 +37,10 @@ def search_financial_assets(query):
             if not symbol:
                 continue
 
-            # **FIX**: Safe price formatting
+            # **IMPROVED**: Safe price formatting
             price_val = item.get('price')
             price_str = "N/A"
-            if price_val is not None:
+            if price_val is not None and str(price_val).replace('.', '').replace('-', '').isdigit():
                 try:
                     price_str = f"${float(price_val):.2f}"
                 except:
@@ -51,8 +56,16 @@ def search_financial_assets(query):
 
         return pd.DataFrame(results)
 
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            st.error("❌ API rate limit exceeded. Try again later.")
+        elif e.response.status_code == 401:
+            st.error("❌ Invalid FMP_API_KEY. Please check your secret.")
+        else:
+            st.error(f"❌ HTTP Error {e.response.status_code}: {e.response.text[:200]}")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Search failed: {str(e)}")
+        st.error(f"❌ Search failed: {str(e)}")
         return pd.DataFrame()
 
 
@@ -93,6 +106,7 @@ def render_search_tab():
     if search_clicked:
         if not keyword.strip():
             st.warning("Please enter a search keyword.")
+            st.rerun()
             return
 
         with st.spinner(f"Searching for '{keyword}'..."):
@@ -101,6 +115,7 @@ def render_search_tab():
 
             if df.empty:
                 st.info("👀 No results. Try: 'tech', 'energy ETF', 'Apple', 'SPY'")
+                st.rerun()
                 return
 
             df.set_index("Symbol", inplace=True)
@@ -113,9 +128,14 @@ def render_search_tab():
         df = st.session_state.search_results_df
         st.subheader(f"Results for '{st.session_state.search_keyword}' ({len(df)} found)")
 
-        # Enhanced table with styling
+        # Enhanced table with styling - **FIXED**: Proper formatting
+        def price_formatter(val):
+            if isinstance(val, str) and val.startswith('$'):
+                return val
+            return "${:.2f}".format(float(val)) if pd.notna(val) else "N/A"
+
         styled_df = df.style.format({
-            "Price": "${:.2f}"
+            "Price": price_formatter
         }).background_gradient(subset=["Price"], cmap="Greens")
 
         st.dataframe(styled_df, use_container_width=True, hide_index=False)
@@ -129,6 +149,7 @@ def render_search_tab():
 
                 if not info:
                     st.error(f"Failed to load {chosen}")
+                    st.rerun()
                     return
 
                 # Common fields
