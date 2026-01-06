@@ -24,23 +24,20 @@ def load_info_data(ticker: str) -> Dict[str, Any]:
     return yf.Ticker(ticker).info
 
 
-def load_etfs(tickers: List[str], period="max", interval="1d") -> Dict[str, Dict[str, Any]]:
-    """
-    Scalable multi-ETF loader.
-    Returns:
-        {
-            "VOO": {"prices": DataFrame, "info": dict},
-            "SPY": {...}
-        }
-    """
+@st.cache_data(ttl=1800, max_entries=20)
+def load_etfs(tickers: List[str], period: str = "5y") -> Dict[str, Dict[str, Any]]:
+    """SINGLE TICKER DOWNLOAD WITH DELAYS"""
     results = {}
 
     for ticker in tickers:
-        print(f"Downloading: {ticker}")
-
-        price_df = load_price_data(ticker, period, interval)
-        info_dict = load_info_data(ticker)
-
-        results[ticker] = {"prices": price_df, "info": info_dict}
+        try:
+            time.sleep(1.0)  # RATE LIMIT PROTECTION
+            yf_ticker = yf.Ticker(ticker)
+            results[ticker] = {
+                "prices": yf_ticker.history(period=period),
+                "info": yf_ticker.info
+            }
+        except:
+            results[ticker] = {"prices": pd.DataFrame(), "info": {}}
 
     return results
