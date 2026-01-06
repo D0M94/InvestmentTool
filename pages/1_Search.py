@@ -3,143 +3,146 @@ import yfinance as yf
 import pandas as pd
 
 
-@st.cache_data(ttl=3600)
-def load_ticker_info(symbol):
-    try:
-        ticker = yf.Ticker(symbol)
-        return ticker.info
-    except:
-        return {}
-
-
-def yfinance_search(query):
-    """Enhanced yfinance search - always shows results"""
-    try:
-        common_tickers = {
-            'aapl': 'AAPL', 'apple': 'AAPL',
-            'msft': 'MSFT', 'microsoft': 'MSFT',
-            'googl': 'GOOGL', 'google': 'GOOGL',
-            'amzn': 'AMZN', 'amazon': 'AMZN',
-            'tsla': 'TSLA', 'tesla': 'TSLA',
-            'nvda': 'NVDA', 'nvidia': 'NVDA',
-            'spy': 'SPY', 'sp500': 'SPY',
-            'qqq': 'QQQ', 'nasdaq': 'QQQ',
-            'meta': 'META', 'facebook': 'META'
-        }
-
-        # Always show popular tickers + query matches
-        results = []
-        query_lower = query.lower().strip()
-
-        # Show matches first
-        for key, symbol in common_tickers.items():
-            if key in query_lower or not results:  # Always add at least some
-                try:
-                    info = load_ticker_info(symbol)
-                    if info.get('currentPrice') is not None:
-                        results.append({
-                            "Symbol": symbol,
-                            "Name": info.get("longName", symbol),
-                            "Type": "ETF" if "ETF" in str(info.get("quoteType", "")) else "Stock",
-                            "Exchange": info.get("exchange", "NASDAQ"),
-                            "Price": f"${info.get('currentPrice', 0):.2f}"
-                        })
-                except:
-                    continue
-
-        # Ensure minimum 3 results
-        if len(results) < 3:
-            fallback_tickers = ['AAPL', 'SPY', 'MSFT']
-            for symbol in fallback_tickers:
-                if len(results) >= 5:
-                    break
-                try:
-                    info = load_ticker_info(symbol)
-                    if symbol not in [r['Symbol'] for r in results] and info.get('currentPrice') is not None:
-                        results.append({
-                            "Symbol": symbol,
-                            "Name": info.get("longName", symbol),
-                            "Type": "ETF" if "ETF" in str(info.get("quoteType", "")) else "Stock",
-                            "Exchange": info.get("exchange", "NASDAQ"),
-                            "Price": f"${info.get('currentPrice', 0):.2f}"
-                        })
-                except:
-                    continue
-
-        return pd.DataFrame(results[:10])
-    except:
-        return pd.DataFrame()
-
-
 def render_search_tab():
-    st.header("🔍 Search Assets")
+    st.header("🔍 Search for Assets")
 
-    # Session state
+    # Initialize session state for search results
     if "search_results_df" not in st.session_state:
         st.session_state.search_results_df = pd.DataFrame()
     if "search_keyword" not in st.session_state:
         st.session_state.search_keyword = ""
 
+    # Better placeholder to encourage name searches
     keyword = st.text_input(
-        "Search stocks & ETFs:",
-        placeholder="AAPL, Tesla, SPY, tech...",
+        "Enter asset name or ticker:",
+        placeholder="Tesla, Apple, QQQ, Europe, Energy...",
         value=st.session_state.search_keyword
     )
 
     col1, col2 = st.columns([3, 1])
+    search_clicked = col1.button("Search")
+    clear_clicked = col2.button("Clear")
 
-    if col1.button("🔍 Search", type="primary", use_container_width=True):
-        if keyword.strip():
-            with st.spinner(f"Searching '{keyword}'..."):
-                df = yfinance_search(keyword)
-                st.session_state.search_keyword = keyword
-                st.session_state.search_results_df = df
-            st.rerun()
-        else:
-            st.warning("Enter a search term!")
-
-    if col2.button("🗑️ Clear", use_container_width=True):
+    if clear_clicked:
         st.session_state.search_results_df = pd.DataFrame()
         st.session_state.search_keyword = ""
         st.rerun()
 
-    # **RESULTS DISPLAY - ALWAYS VISIBLE**
+    if search_clicked:
+        if not keyword.strip():
+            st.warning("Please enter a search keyword.")
+            return
+
+        try:
+            st.session_state.search_keyword = keyword
+            search_results = yf.Search(keyword, max_results=20).search()
+            quotes = search_results.quotes
+
+        except Exception as e:
+            st.error(f"Search failed: {e}")
+            return
+
+        if not quotes:
+            st.info("No assets found. Try broader terms like 'Europe ETF' or exact tickers.")
+            return
+
+        df = pd.DataFrame([
+            {
+                "Symbol": q.get("symbol"),
+                "Name": q.get("shortname") or q.get("longname", ""),
+                "Type": q.get("quoteType", "").replace("EQUITY", "Stock").replace("ETF", "ETF"),
+                "Exchange": q.get("exchange", ""),
+            }
+            for q in quotes
+        ])
+
+        df.set_index("Symbol", inplace=True)
+        df = df.head(15)
+        st.session_state.search_results_df = df
+        st.rerun()
+
+    # Show search results if available
     if not st.session_state.search_results_df.empty:
         df = st.session_state.search_results_df
-        st.success(f"✅ {len(df)} results for '{st.session_state.search_keyword}'")
+        st.subheader(f"Search Results for '{st.session_state.search_keyword}' ({len(df)} found)")
+        st.dataframe(df, use_container_width=True, hide_index=False)
 
-        st.markdown("---")
-        st.dataframe(df, use_container_width=True, height=400)
-        st.markdown("---")
+        st.subheader("Load Selected Asset")
+        chosen = st.selectbox("Select ticker to load:", df.index.tolist())
 
-        # Load selected ticker
-        st.subheader("📥 Load Asset")
-        chosen = st.selectbox("Select ticker:", df["Symbol"].tolist())
+        if st.button("Load Ticker"):
+            with st.spinner(f"Loading details for {chosen}..."):
+                try:
+                    ticker = yf.Ticker(chosen)
+                    info = ticker.info
 
-        if st.button("Load Details", type="secondary", use_container_width=True):
-            with st.spinner(f"Loading {chosen}..."):
-                info = load_ticker_info(chosen)
-                if info:
-                    st.session_state["asset_details"] = {
-                        "Name": info.get("longName", chosen),
+                    # Common fields for all assets
+                    asset_data = {
+                        "Name": info.get("longName") or info.get("shortName") or "N/A",
                         "Ticker": chosen,
-                        "Price": f"${info.get('currentPrice', 0):.2f}",
-                        "Exchange": info.get("exchange", "N/A"),
-                        "Sector": info.get("sector", "N/A"),
-                        "Market Cap": info.get("marketCap", "N/A"),
-                        "Country": info.get("country", "N/A")
+                        "Type": info.get("quoteType", "").replace("EQUITY", "Stock").replace("ETF", "ETF"),
+                        "Exchange": info.get("exchange", ""),
+                        "Currency": info.get("currency", "N/A"),
                     }
-                    st.success(f"✅ Loaded **{info.get('longName', chosen)}**")
 
-                    with st.expander("📋 Full Details", expanded=True):
-                        cols = st.columns(2)
-                        for i, (k, v) in enumerate(st.session_state["asset_details"].items()):
-                            with cols[i % 2]:
-                                st.markdown(f"**{k}:** {v}")
-                else:
-                    st.error(f"❌ Failed to load {chosen}")
+                    # Stock-specific fields - FORMATTED Market Cap
+                    if asset_data["Type"] == "Stock":
+                        market_cap = info.get("marketCap", "N/A")
+                        if isinstance(market_cap, (int, float)):
+                            if market_cap >= 1e12:
+                                market_cap = f"${market_cap / 1e12:.1f}T"
+                            elif market_cap >= 1e9:
+                                market_cap = f"${market_cap / 1e9:.1f}B"
+                            elif market_cap >= 1e6:
+                                market_cap = f"${market_cap / 1e6:.1f}M"
+                            else:
+                                market_cap = f"${market_cap / 1e3:.0f}K"
+
+                        asset_data.update({
+                            "Sector": info.get("sector", "N/A"),
+                            "Industry": info.get("industry", "N/A"),
+                            "Market Cap": market_cap,
+                            "Country": info.get("country", "N/A"),
+                        })
+
+                    # ETF-specific fields
+                    elif asset_data["Type"] == "ETF":
+                        market_cap = info.get("totalAssets", "N/A")
+                        if isinstance(market_cap, (int, float)):
+                            if market_cap >= 1e9:
+                                market_cap = f"${market_cap / 1e9:.1f}B"
+                            elif market_cap >= 1e6:
+                                market_cap = f"${market_cap / 1e6:.1f}M"
+                            else:
+                                market_cap = f"${market_cap / 1e3:.0f}K"
+
+                        expense_ratio = info.get("netExpenseRatio", "N/A")
+                        if isinstance(expense_ratio, (int, float)):
+                            expense_ratio = f"{(expense_ratio/100):.2%}"
+
+                        asset_data.update({
+                            "Expense Ratio": expense_ratio,
+                            "Issuer": info.get("fundFamily", "N/A"),
+                            "Category": info.get("category", "N/A"),
+                            "AUM": market_cap,
+                        })
+
+                    # Store in session state
+                    st.session_state["selected_ticker"] = chosen
+                    st.session_state["asset_details"] = asset_data
+
+                    # Compact table solution
+                    with st.expander("📋 Asset info", expanded=True):
+                        col1, col2 = st.columns(2)
+                        for i, (key, value) in enumerate(asset_data.items()):
+                            col = col1 if i % 2 == 0 else col2
+                            col.markdown(f"**{key}:** {value}")
+
+                except Exception as e:
+                    st.error(f"Failed to load details for {chosen}: {str(e)}")
+                    st.session_state["selected_ticker"] = chosen
     else:
-        st.info("👇 **Search anything** - AAPL, Tesla, SPY, Microsoft, tech...")
+        st.info("👆 Search for assets above to get started")
 
 
 render_search_tab()
