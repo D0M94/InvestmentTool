@@ -11,21 +11,26 @@ def search_financial_assets(query):
         st.warning("🔑 Add FMP_API_KEY to Streamlit Secrets (free at financialmodelingprep.com)")
         return pd.DataFrame()
 
-    url = f"https://financialmodelingprep.com/api/v3/search?query={query}&limit=20&apikey={api_key}"
+    # **FIX**: URL encode the query parameter to prevent 403 errors
+    from urllib.parse import quote
+    encoded_query = quote(query)
+    url = f"https://financialmodelingprep.com/api/v3/search?query={encoded_query}&limit=20&apikey={api_key}"
 
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raises exception for bad status codes
+        # **FIX**: Add proper headers to bypass 403 restrictions
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, timeout=10, headers=headers)
+        response.raise_for_status()
 
         data = response.json()
 
-        # **IMPROVED**: Better error handling for FMP API responses
         if not isinstance(data, list):
-            st.error(f"Invalid API response: {data} - check your FMP_API_KEY")
+            st.error(f"Invalid API response: {data}")
             return pd.DataFrame()
 
         if len(data) == 0:
-            st.info("No results found for this query")
             return pd.DataFrame()
 
         results = []
@@ -37,10 +42,9 @@ def search_financial_assets(query):
             if not symbol:
                 continue
 
-            # **IMPROVED**: Safe price formatting
             price_val = item.get('price')
             price_str = "N/A"
-            if price_val is not None and str(price_val).replace('.', '').replace('-', '').isdigit():
+            if price_val is not None:
                 try:
                     price_str = f"${float(price_val):.2f}"
                 except:
@@ -57,19 +61,26 @@ def search_financial_assets(query):
         return pd.DataFrame(results)
 
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 429:
-            st.error("❌ API rate limit exceeded. Try again later.")
+        if e.response.status_code == 403:
+            st.error("❌ 403 Forbidden - API key blocked or IP restricted. Try:\n"
+                     "1. New free API key from financialmodelingprep.com\n"
+                     "2. Different search term\n"
+                     "3. Wait 1 hour (rate limiting)")
+            st.info(
+                "**Debug**: Test your key → https://financialmodelingprep.com/api/v3/search?query=AAPL&limit=5&apikey=YOUR_KEY")
+        elif e.response.status_code == 429:
+            st.error("❌ API rate limit exceeded. Try again later (250/day free tier).")
         elif e.response.status_code == 401:
             st.error("❌ Invalid FMP_API_KEY. Please check your secret.")
         else:
-            st.error(f"❌ HTTP Error {e.response.status_code}: {e.response.text[:200]}")
+            st.error(f"❌ HTTP {e.response.status_code}: {e.response.text[:300]}")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Search failed: {str(e)}")
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)  # Cache 1 hour
+@st.cache_data(ttl=3600)
 def load_ticker_info(symbol):
     """Cached yfinance - prevents rate limits"""
     try:
@@ -82,7 +93,6 @@ def load_ticker_info(symbol):
 def render_search_tab():
     st.header("🔍 Search Assets")
 
-    # Initialize session state
     if "search_results_df" not in st.session_state:
         st.session_state.search_results_df = pd.DataFrame()
     if "search_keyword" not in st.session_state:
@@ -123,21 +133,21 @@ def render_search_tab():
             st.session_state.search_results_df = df
             st.rerun()
 
-    # Show results
     if not st.session_state.search_results_df.empty:
         df = st.session_state.search_results_df
         st.subheader(f"Results for '{st.session_state.search_keyword}' ({len(df)} found)")
 
-        # Enhanced table with styling - **FIXED**: Proper formatting
         def price_formatter(val):
+            if pd.isna(val):
+                return "N/A"
             if isinstance(val, str) and val.startswith('$'):
                 return val
-            return "${:.2f}".format(float(val)) if pd.notna(val) else "N/A"
+            try:
+                return f"${float(val):.2f}"
+            except:
+                return "N/A"
 
-        styled_df = df.style.format({
-            "Price": price_formatter
-        }).background_gradient(subset=["Price"], cmap="Greens")
-
+        styled_df = df.style.format({"Price": price_formatter})
         st.dataframe(styled_df, use_container_width=True, hide_index=False)
 
         st.subheader("Load Selected Asset")
@@ -152,7 +162,6 @@ def render_search_tab():
                     st.rerun()
                     return
 
-                # Common fields
                 asset_data = {
                     "Name": info.get("longName") or info.get("shortName") or "N/A",
                     "Ticker": chosen,
@@ -162,7 +171,6 @@ def render_search_tab():
                     "Price": f"${info.get('currentPrice', 0):.2f}"
                 }
 
-                # Stock fields
                 if asset_data["Type"] == "Stock":
                     market_cap = info.get("marketCap", 0)
                     if isinstance(market_cap, (int, float)):
@@ -172,7 +180,6 @@ def render_search_tab():
                             market_cap = f"${market_cap / 1e9:.1f}B"
                         else:
                             market_cap = f"${market_cap / 1e6:.0f}M"
-
                     asset_data.update({
                         "Sector": info.get("sector", "N/A"),
                         "Industry": info.get("industry", "N/A"),
@@ -180,16 +187,13 @@ def render_search_tab():
                         "Country": info.get("country", "N/A"),
                     })
 
-                # ETF fields
                 elif asset_data["Type"] == "ETF":
                     aum = info.get("totalAssets", 0)
                     if isinstance(aum, (int, float)):
                         aum = f"${aum / 1e9:.1f}B" if aum >= 1e9 else f"${aum / 1e6:.0f}M"
-
                     expense = info.get("netExpenseRatio", "N/A")
                     if isinstance(expense, (int, float)):
                         expense = f"{expense:.2%}"
-
                     asset_data.update({
                         "AUM": aum,
                         "Expense Ratio": expense,
@@ -197,12 +201,10 @@ def render_search_tab():
                         "Category": info.get("category", "N/A"),
                     })
 
-                # Store and display
                 st.session_state["selected_ticker"] = chosen
                 st.session_state["asset_details"] = asset_data
                 st.success(f"✅ Loaded {asset_data['Name']}")
 
-                # Details display
                 with st.expander("📋 Full Details", expanded=True):
                     col1, col2 = st.columns(2)
                     for i, (key, value) in enumerate(asset_data.items()):
