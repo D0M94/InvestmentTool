@@ -17,28 +17,36 @@ def search_financial_assets(query):
         response = requests.get(url, timeout=10)
         data = response.json()
 
-        # **CRITICAL FIX**: Validate data type before loop
+        # **FIX**: Check if data is list before looping
         if not isinstance(data, list):
-            st.error("Invalid API response format")
+            st.error("Invalid API response - check your FMP_API_KEY")
             return pd.DataFrame()
 
         results = []
         for item in data[:15]:
-            # **CRITICAL FIX**: Check item is dict before .get()
+            # **FIX**: Check each item is dict before .get()
             if not isinstance(item, dict):
                 continue
 
             symbol = item.get("symbol", "")
-            if not symbol:  # Skip empty symbols
+            if not symbol:
                 continue
+
+            # **FIX**: Safe price formatting
+            price_val = item.get('price')
+            price_str = "N/A"
+            if price_val is not None:
+                try:
+                    price_str = f"${float(price_val):.2f}"
+                except:
+                    price_str = "N/A"
 
             results.append({
                 "Symbol": symbol,
                 "Name": item.get("name", ""),
                 "Type": item.get("type", "").replace("etf", "ETF").replace("stock", "Stock").title(),
                 "Exchange": item.get("exchangeShortName") or item.get("exchange", "N/A"),
-                # **FIXED**: Safe price handling
-                "Price": f"${float(item.get('price', 0)):.2f}" if item.get('price') is not None else "N/A"
+                "Price": price_str
             })
 
         return pd.DataFrame(results)
