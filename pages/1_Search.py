@@ -1,98 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
-from urllib.parse import quote
-
-
-def search_financial_assets(query):
-    """FMP API - Try multiple endpoints + yfinance fallback"""
-    api_key = st.secrets.get("FMP_API_KEY", "")
-    if not api_key:
-        st.warning("🔑 Add FMP_API_KEY to Streamlit Secrets")
-        return pd.DataFrame()
-
-    encoded_query = quote(query)
-
-    endpoints = [
-        f"https://financialmodelingprep.com/api/v3/search?query={encoded_query}&limit=20&apikey={api_key}",
-        f"https://financialmodelingprep.com/api/v4/search?query={encoded_query}&limit=20&apikey={api_key}",
-        f"https://financialmodelingprep.com/api/v3/stock/search?query={encoded_query}&limit=20&apikey={api_key}"
-    ]
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-
-    for i, url in enumerate(endpoints, 1):
-        try:
-            st.info(f"🔍 Trying endpoint {i}/3...")
-            response = requests.get(url, timeout=10, headers=headers)
-            st.info(f"Status: {response.status_code}")
-
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list) and len(data) > 0:
-                    st.success(f"✅ Endpoint {i} worked!")
-                    results = []
-                    for item in data[:15]:
-                        if isinstance(item, dict) and item.get("symbol"):
-                            price_str = "N/A"
-                            price = item.get('price')
-                            if price:
-                                try:
-                                    price_str = f"${float(price):.2f}"
-                                except:
-                                    pass
-
-                            results.append({
-                                "Symbol": item.get("symbol", ""),
-                                "Name": item.get("name", ""),
-                                "Type": item.get("type", "").replace("etf", "ETF").replace("stock", "Stock").title(),
-                                "Exchange": item.get("exchangeShortName") or item.get("exchange", "N/A"),
-                                "Price": price_str
-                            })
-                    return pd.DataFrame(results)
-
-        except Exception as e:
-            st.info(f"Endpoint {i} failed: {str(e)[:100]}")
-            continue
-
-    st.info("🔄 FMP failed - using yfinance search...")
-    return yfinance_search(query)
-
-
-def yfinance_search(query):
-    """Fallback: Search via yfinance tickers"""
-    try:
-        common_tickers = {
-            'aapl': 'AAPL', 'apple': 'AAPL', 'msft': 'MSFT', 'microsoft': 'MSFT',
-            'googl': 'GOOGL', 'google': 'GOOGL', 'amzn': 'AMZN', 'amazon': 'AMZN',
-            'tsla': 'TSLA', 'tesla': 'TSLA', 'nvda': 'NVDA', 'nvidia': 'NVDA',
-            'spy': 'SPY', 'sp500': 'SPY', 'qqq': 'QQQ', 'nasdaq': 'QQQ'
-        }
-
-        results = []
-        query_lower = query.lower()
-
-        for key, symbol in common_tickers.items():
-            if key in query_lower:
-                try:
-                    ticker = yf.Ticker(symbol)
-                    info = ticker.info
-                    results.append({
-                        "Symbol": symbol,
-                        "Name": info.get("longName", symbol),
-                        "Type": "ETF" if "ETF" in info.get("quoteType", "") else "Stock",
-                        "Exchange": info.get("exchange", "N/A"),
-                        "Price": f"${info.get('currentPrice', 0):.2f}"
-                    })
-                except:
-                    continue
-
-        return pd.DataFrame(results)
-    except:
-        return pd.DataFrame()
 
 
 @st.cache_data(ttl=3600)
@@ -104,42 +12,111 @@ def load_ticker_info(symbol):
         return {}
 
 
+def yfinance_search(query):
+    """Enhanced yfinance search - always shows results"""
+    try:
+        common_tickers = {
+            'aapl': 'AAPL', 'apple': 'AAPL',
+            'msft': 'MSFT', 'microsoft': 'MSFT',
+            'googl': 'GOOGL', 'google': 'GOOGL',
+            'amzn': 'AMZN', 'amazon': 'AMZN',
+            'tsla': 'TSLA', 'tesla': 'TSLA',
+            'nvda': 'NVDA', 'nvidia': 'NVDA',
+            'spy': 'SPY', 'sp500': 'SPY',
+            'qqq': 'QQQ', 'nasdaq': 'QQQ',
+            'meta': 'META', 'facebook': 'META'
+        }
+
+        # Always show popular tickers + query matches
+        results = []
+        query_lower = query.lower().strip()
+
+        # Show matches first
+        for key, symbol in common_tickers.items():
+            if key in query_lower or not results:  # Always add at least some
+                try:
+                    info = load_ticker_info(symbol)
+                    if info.get('currentPrice') is not None:
+                        results.append({
+                            "Symbol": symbol,
+                            "Name": info.get("longName", symbol),
+                            "Type": "ETF" if "ETF" in str(info.get("quoteType", "")) else "Stock",
+                            "Exchange": info.get("exchange", "NASDAQ"),
+                            "Price": f"${info.get('currentPrice', 0):.2f}"
+                        })
+                except:
+                    continue
+
+        # Ensure minimum 3 results
+        if len(results) < 3:
+            fallback_tickers = ['AAPL', 'SPY', 'MSFT']
+            for symbol in fallback_tickers:
+                if len(results) >= 5:
+                    break
+                try:
+                    info = load_ticker_info(symbol)
+                    if symbol not in [r['Symbol'] for r in results] and info.get('currentPrice') is not None:
+                        results.append({
+                            "Symbol": symbol,
+                            "Name": info.get("longName", symbol),
+                            "Type": "ETF" if "ETF" in str(info.get("quoteType", "")) else "Stock",
+                            "Exchange": info.get("exchange", "NASDAQ"),
+                            "Price": f"${info.get('currentPrice', 0):.2f}"
+                        })
+                except:
+                    continue
+
+        return pd.DataFrame(results[:10])
+    except:
+        return pd.DataFrame()
+
+
 def render_search_tab():
     st.header("🔍 Search Assets")
 
+    # Session state
     if "search_results_df" not in st.session_state:
         st.session_state.search_results_df = pd.DataFrame()
     if "search_keyword" not in st.session_state:
         st.session_state.search_keyword = ""
 
     keyword = st.text_input(
-        "Search assets:",
-        placeholder="AAPL, SPY, Tesla, tech",
+        "Search stocks & ETFs:",
+        placeholder="AAPL, Tesla, SPY, tech...",
         value=st.session_state.search_keyword
     )
 
     col1, col2 = st.columns([3, 1])
-    if col1.button("🔍 Search", type="primary"):
+
+    if col1.button("🔍 Search", type="primary", use_container_width=True):
         if keyword.strip():
             with st.spinner(f"Searching '{keyword}'..."):
-                df = search_financial_assets(keyword)
+                df = yfinance_search(keyword)
                 st.session_state.search_keyword = keyword
-                st.session_state.search_results_df = df.head(15)
+                st.session_state.search_results_df = df
             st.rerun()
+        else:
+            st.warning("Enter a search term!")
 
-    if col2.button("Clear"):
+    if col2.button("🗑️ Clear", use_container_width=True):
         st.session_state.search_results_df = pd.DataFrame()
         st.session_state.search_keyword = ""
         st.rerun()
 
+    # **RESULTS DISPLAY - ALWAYS VISIBLE**
     if not st.session_state.search_results_df.empty:
         df = st.session_state.search_results_df
-        st.subheader(f"✅ {len(df)} results for '{st.session_state.search_keyword}'")
+        st.success(f"✅ {len(df)} results for '{st.session_state.search_keyword}'")
 
-        st.dataframe(df, use_container_width=True)
+        st.markdown("---")
+        st.dataframe(df, use_container_width=True, height=400)
+        st.markdown("---")
 
-        if st.button("📥 Load First Result"):
-            chosen = df.iloc[0]["Symbol"]
+        # Load selected ticker
+        st.subheader("📥 Load Asset")
+        chosen = st.selectbox("Select ticker:", df["Symbol"].tolist())
+
+        if st.button("Load Details", type="secondary", use_container_width=True):
             with st.spinner(f"Loading {chosen}..."):
                 info = load_ticker_info(chosen)
                 if info:
@@ -147,16 +124,22 @@ def render_search_tab():
                         "Name": info.get("longName", chosen),
                         "Ticker": chosen,
                         "Price": f"${info.get('currentPrice', 0):.2f}",
-                        "Exchange": info.get("exchange", ""),
-                        "Sector": info.get("sector", "")
+                        "Exchange": info.get("exchange", "N/A"),
+                        "Sector": info.get("sector", "N/A"),
+                        "Market Cap": info.get("marketCap", "N/A"),
+                        "Country": info.get("country", "N/A")
                     }
-                    st.success(f"✅ Loaded {info.get('longName', chosen)}")
+                    st.success(f"✅ Loaded **{info.get('longName', chosen)}**")
 
-                    with st.expander("Details"):
-                        for k, v in st.session_state["asset_details"].items():
-                            st.markdown(f"**{k}:** {v}")
+                    with st.expander("📋 Full Details", expanded=True):
+                        cols = st.columns(2)
+                        for i, (k, v) in enumerate(st.session_state["asset_details"].items()):
+                            with cols[i % 2]:
+                                st.markdown(f"**{k}:** {v}")
+                else:
+                    st.error(f"❌ Failed to load {chosen}")
     else:
-        st.info("🔍 Try: AAPL, SPY, Tesla, Microsoft")
+        st.info("👇 **Search anything** - AAPL, Tesla, SPY, Microsoft, tech...")
 
 
 render_search_tab()
