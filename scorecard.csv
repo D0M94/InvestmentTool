@@ -1,5 +1,5 @@
-Rank,Ticker,Asset type,Final Score,Momentum,Value,Volatility,Size
-1,EEM,ETF,0.51,1.3,1.38,0.24,-1.15
-2,SPY,ETF,0.09,-0.7,-0.09,0.69,0.72
-3,VTI,ETF,-0.15,-0.87,-1.0,0.54,0.94
-4,QQQ,ETF,-0.44,0.27,-0.3,-1.47,-0.51
+Rank,Ticker,Asset type,Final Score,Momentum,Value,Volatility,Size,Cost
+1,EEM,ETF,0.53,1.49,1.36,0.24,-1.15,-0.8
+2,SPY,ETF,0.09,-0.56,-0.05,0.69,0.72,-0.14
+3,VTI,ETF,0.02,-0.6,-1.04,0.54,0.95,1.44
+4,QQQ,ETF,-0.64,-0.32,-0.28,-1.47,-0.51,-0.5

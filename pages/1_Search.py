@@ -1,18 +1,34 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import time
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_yf_search(keyword: str) -> list:
+    """Cached yfinance search."""
+    time.sleep(0.2)
+    try:
+        return yf.Search(keyword, max_results=20).search().quotes
+    except:
+        return []
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_ticker_info(ticker: str) -> dict:
+    """Cached ticker info."""
+    time.sleep(0.2)
+    try:
+        return yf.Ticker(ticker).info
+    except:
+        return {}
 
 def render_search_tab():
     st.header("🔍 Search for Assets")
 
-    # Initialize session state for search results
     if "search_results_df" not in st.session_state:
         st.session_state.search_results_df = pd.DataFrame()
     if "search_keyword" not in st.session_state:
         st.session_state.search_keyword = ""
 
-    # Better placeholder to encourage name searches
     keyword = st.text_input(
         "Enter asset name or ticker:",
         placeholder="Tesla, Apple, QQQ, Europe, Energy...",
@@ -35,33 +51,27 @@ def render_search_tab():
 
         try:
             st.session_state.search_keyword = keyword
-            search_results = yf.Search(keyword, max_results=20).search()
-            quotes = search_results.quotes
-
+            search_results = cached_yf_search(keyword)
         except Exception as e:
             st.error(f"Search failed: {e}")
             return
 
-        if not quotes:
+        if not search_results:
             st.info("No assets found. Try broader terms like 'Europe ETF' or exact tickers.")
             return
 
-        df = pd.DataFrame([
-            {
-                "Symbol": q.get("symbol"),
-                "Name": q.get("shortname") or q.get("longname", ""),
-                "Type": q.get("quoteType", "").replace("EQUITY", "Stock").replace("ETF", "ETF"),
-                "Exchange": q.get("exchange", ""),
-            }
-            for q in quotes
-        ])
+        df = pd.DataFrame([{
+            "Symbol": q.get("symbol"),
+            "Name": q.get("shortname") or q.get("longname", ""),
+            "Type": q.get("quoteType", "").replace("EQUITY", "Stock").replace("ETF", "ETF"),
+            "Exchange": q.get("exchange", ""),
+        } for q in search_results])
 
         df.set_index("Symbol", inplace=True)
         df = df.head(15)
         st.session_state.search_results_df = df
         st.rerun()
 
-    # Show search results if available
     if not st.session_state.search_results_df.empty:
         df = st.session_state.search_results_df
         st.subheader(f"Search Results for '{st.session_state.search_keyword}' ({len(df)} found)")
@@ -73,10 +83,8 @@ def render_search_tab():
         if st.button("Load Ticker"):
             with st.spinner(f"Loading details for {chosen}..."):
                 try:
-                    ticker = yf.Ticker(chosen)
-                    info = ticker.info
+                    info = cached_ticker_info(chosen)
 
-                    # Common fields for all assets
                     asset_data = {
                         "Name": info.get("longName") or info.get("shortName") or "N/A",
                         "Ticker": chosen,
@@ -85,7 +93,6 @@ def render_search_tab():
                         "Currency": info.get("currency", "N/A"),
                     }
 
-                    # Stock-specific fields - FORMATTED Market Cap
                     if asset_data["Type"] == "Stock":
                         market_cap = info.get("marketCap", "N/A")
                         if isinstance(market_cap, (int, float)):
@@ -97,15 +104,12 @@ def render_search_tab():
                                 market_cap = f"${market_cap / 1e6:.1f}M"
                             else:
                                 market_cap = f"${market_cap / 1e3:.0f}K"
-
                         asset_data.update({
                             "Sector": info.get("sector", "N/A"),
                             "Industry": info.get("industry", "N/A"),
                             "Market Cap": market_cap,
                             "Country": info.get("country", "N/A"),
                         })
-
-                    # ETF-specific fields
                     elif asset_data["Type"] == "ETF":
                         market_cap = info.get("totalAssets", "N/A")
                         if isinstance(market_cap, (int, float)):
@@ -115,11 +119,9 @@ def render_search_tab():
                                 market_cap = f"${market_cap / 1e6:.1f}M"
                             else:
                                 market_cap = f"${market_cap / 1e3:.0f}K"
-
                         expense_ratio = info.get("netExpenseRatio", "N/A")
                         if isinstance(expense_ratio, (int, float)):
                             expense_ratio = f"{(expense_ratio/100):.2%}"
-
                         asset_data.update({
                             "Expense Ratio": expense_ratio,
                             "Issuer": info.get("fundFamily", "N/A"),
@@ -127,11 +129,9 @@ def render_search_tab():
                             "AUM": market_cap,
                         })
 
-                    # Store in session state
                     st.session_state["selected_ticker"] = chosen
                     st.session_state["asset_details"] = asset_data
 
-                    # Compact table solution
                     with st.expander("📋 Asset info", expanded=True):
                         col1, col2 = st.columns(2)
                         for i, (key, value) in enumerate(asset_data.items()):
@@ -143,6 +143,5 @@ def render_search_tab():
                     st.session_state["selected_ticker"] = chosen
     else:
         st.info("👆 Search for assets above to get started")
-
 
 render_search_tab()

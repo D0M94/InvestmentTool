@@ -33,12 +33,13 @@ def highlight_benchmark(row):
 
 
 if st.button("Analyze"):
-    with st.spinner("Loading data..."):
-        # Asset Scoring - TICKERS ONLY (no benchmark) - FIXED FORMATTING
-        factor_df = compute_factors(load_etfs(tickers, period=period), period=period)
-        scorecard = create_scorecard(factor_df)
+    with st.spinner("🔄 Computing scores & performance..."):
+        # SINGLE CACHED LOAD for ALL analysis (CRITICAL FIX)
+        etf_data = load_etfs(tickers + ([benchmark] if benchmark not in tickers else []), period=period)
 
-        # FIXED: Format only numeric columns to 2 decimals
+        # Scoring (tickers only)
+        factor_df = compute_factors({t: etf_data[t] for t in tickers if t in etf_data}, period=period)
+        scorecard = create_scorecard(factor_df)
         numeric_cols = scorecard.select_dtypes(include=['number']).columns
         styled_scorecard = scorecard.style.format({col: "{:.2f}" for col in numeric_cols}).apply(highlight_benchmark,
                                                                                                  axis=1)
@@ -46,34 +47,26 @@ if st.button("Analyze"):
         st.subheader("Asset Scorecard")
         st.dataframe(styled_scorecard, use_container_width=True, hide_index=False)
 
-        # Performance Comparison - ALL TICKERS + BENCHMARK
+        # Performance (all tickers + benchmark)
         all_tickers = list(set(tickers + [benchmark]))
         cum_df, metrics = analyze_tickers(all_tickers, period=period, risk_free_rate=risk_free_rate)
 
         st.subheader("Cumulative Performance")
         fig = go.Figure()
-
         for t in tickers:
             if t in cum_df.columns:
                 fig.add_trace(go.Scatter(
-                    x=cum_df.index,
-                    y=cum_df[t],
-                    mode="lines",
-                    name=t,
+                    x=cum_df.index, y=cum_df[t],
+                    mode="lines", name=t,
                     line=dict(width=1.5)
                 ))
-
         if benchmark in cum_df.columns:
             fig.add_trace(go.Scatter(
-                x=cum_df.index,
-                y=cum_df[benchmark],
-                mode="lines",
-                name=f"benchmark ({benchmark})",
+                x=cum_df.index, y=cum_df[benchmark],
+                mode="lines", name=f"benchmark ({benchmark})",
                 line=dict(width=1.5, dash="dash", color="#FFC39B")
             ))
-
         fig.update_yaxes(tickformat=".1%")
-        #fig.update_layout(height=500, template="plotly_white", title="Cumulative Performance")
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("Performance Metrics")
@@ -94,5 +87,4 @@ if st.button("Analyze"):
             "Annual Volatility": "{:.1f}%",
             "Sharpe Ratio": "{:.2f}"
         }).apply(highlight_benchmark, axis=1)
-
         st.dataframe(styled_df, use_container_width=True)

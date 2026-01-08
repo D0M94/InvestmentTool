@@ -1,28 +1,20 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
 from typing import List, Dict
 from etf_loader import load_etfs
 
-# --------------------------
-# Metrics Calculation
-# --------------------------
-
+# -------------------------- Metrics Calculation -----------------------
 def compute_metrics(prices: pd.Series, risk_free_rate: float = 0.03) -> dict:
-    """
-    Compute performance metrics for a single price series.
-    """
-
-    # --- FIX: ensure Series, not DataFrame ---
+    """Compute performance metrics for a single price series."""
     if isinstance(prices, pd.DataFrame):
         prices = prices.squeeze()
-
     prices = prices.dropna()
     returns = prices.pct_change().dropna()
 
     total_return = float(prices.iloc[-1] / prices.iloc[0] - 1)
     annual_return = float(returns.mean() * 252)
     annual_vol = float(returns.std() * np.sqrt(252))
-
     sharpe = (annual_return - risk_free_rate) / annual_vol if annual_vol != 0 else np.nan
 
     return {
@@ -32,35 +24,21 @@ def compute_metrics(prices: pd.Series, risk_free_rate: float = 0.03) -> dict:
         "Sharpe Ratio": sharpe
     }
 
-
-# --------------------------
-# Cumulative Performance
-# --------------------------
-
+# -------------------------- Cumulative Performance --------------------
 def cumulative_performance(prices: pd.Series) -> pd.Series:
-    """
-    Return cumulative returns series from price series
-    """
-
-    # --- FIX: ensure Series ---
+    """Return cumulative returns series from price series."""
     if isinstance(prices, pd.DataFrame):
         prices = prices.squeeze()
-
     prices = prices.dropna()
     returns = prices.pct_change().fillna(0)
-    cum_returns = ((1 + returns).cumprod())-1
+    cum_returns = ((1 + returns).cumprod()) - 1
     return cum_returns
 
-
-# --------------------------
-# Analyze multiple tickers
-# --------------------------
-
+# -------------------------- Analyze multiple tickers -------------------
+@st.cache_data(ttl=3600, show_spinner=False)
 def analyze_tickers(tickers: List[str], period: str = "5y", risk_free_rate: float = 0.0):
-    """
-    Download price data for tickers, compute cumulative returns and metrics.
-    """
-    etf_data = load_etfs(tickers, period=period)
+    """Cached analysis using shared etf_loader cache."""
+    etf_data = load_etfs(tickers, period=period)  # Uses cached loader
     cum_df = pd.DataFrame()
     metrics = {}
 
@@ -71,7 +49,6 @@ def analyze_tickers(tickers: List[str], period: str = "5y", risk_free_rate: floa
             print(f"⚠️ {ticker} missing 'Adj Close', skipping")
             continue
 
-        # --- FIX: ensure Series ---
         if isinstance(prices, pd.DataFrame):
             prices = prices.squeeze()
 

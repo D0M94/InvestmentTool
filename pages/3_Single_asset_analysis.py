@@ -6,18 +6,16 @@ import numpy as np
 
 st.title("🔎 Single Asset Dashboard")
 
-# Inputs
 ticker = st.text_input("Ticker", "SPY").upper()
 period = st.selectbox("History", ["1y", "2y", "5y", "10y", "max"], index=1)
 benchmark_input = st.text_input("Benchmark (optional)", "QQQ").upper()
 use_benchmark = st.checkbox("Show benchmark", value=True)
 
-
-@st.cache_data
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_and_process_etf(tickers, period):
-    """Cached ETF loader with processing."""
+    """Cached ETF loader with processing - uses shared cache."""
     try:
-        data = load_etfs(tickers, period=period)
+        data = load_etfs(tickers, period=period)  # Shared cached loader
         processed = {}
         for ticker in tickers:
             if ticker in data:
@@ -34,10 +32,8 @@ def load_and_process_etf(tickers, period):
         st.error(f"Data loading failed: {str(e)}")
         return {}
 
-
 if st.button("Analyze", type="primary"):
     with st.spinner("Loading data..."):
-        # Load MAIN asset
         main_data = load_and_process_etf([ticker], period)
         if ticker not in main_data or main_data[ticker].empty:
             st.error(f"No data found for {ticker}")
@@ -46,7 +42,6 @@ if st.button("Analyze", type="primary"):
         price = main_data[ticker]
         main_dates = price.index
 
-        # Load BENCHMARK once (if needed)
         benchmark_price = None
         if use_benchmark and benchmark_input and benchmark_input != ticker:
             benchmark_data = load_and_process_etf([benchmark_input], period)
@@ -56,20 +51,17 @@ if st.button("Analyze", type="primary"):
     # === CUMULATIVE PERFORMANCE ===
     st.subheader("Cumulative Performance")
     fig1 = go.Figure()
-
     fig1.add_trace(go.Scatter(
         x=price.index, y=price["CumReturns"],
         mode="lines", name=ticker,
         line=dict(width=3, color="blue")
     ))
 
-    # Benchmark with robust alignment
     bench_cum_daily = None
     if benchmark_price is not None:
         bench_cum = benchmark_price["CumReturns"]
         bench_cum_daily = bench_cum.resample('D').ffill().reindex(main_dates, method='ffill')
         bench_cum_daily = bench_cum_daily.bfill().fillna(0)
-
         coverage_pct = (bench_cum_daily.dropna().size / len(main_dates)) * 100
         if coverage_pct > 50:
             fig1.add_trace(go.Scatter(
@@ -77,9 +69,7 @@ if st.button("Analyze", type="primary"):
                 mode="lines", name=benchmark_input,
                 line=dict(width=3, dash="dash", color="#FF6B35")
             ))
-            #st.success(f"✅ Benchmark: {coverage_pct:.1f}% coverage")
         else:
-            #st.warning(f"⚠️ Benchmark coverage too low: {coverage_pct:.1f}%")
             benchmark_price = None
 
     fig1.update_yaxes(tickformat=".1%")
@@ -90,7 +80,6 @@ if st.button("Analyze", type="primary"):
     # === ROLLING VOLATILITY ===
     st.subheader("3-Month Rolling Volatility")
     fig2 = go.Figure()
-
     fig2.add_trace(go.Scatter(
         x=price.index, y=price["RollingVol"],
         mode="lines", name=f"{ticker} Vol",
@@ -99,7 +88,6 @@ if st.button("Analyze", type="primary"):
 
     if benchmark_price is not None:
         bench_vol = benchmark_price["RollingVol"]
-
         coverage_pct = (bench_vol.dropna().size / len(main_dates)) * 100
         if coverage_pct > 50:
             fig2.add_trace(go.Scatter(
@@ -115,14 +103,10 @@ if st.button("Analyze", type="primary"):
 
     # === KEY METRICS ===
     st.subheader("Performance Metrics")
-
-    # Row 1: Main asset metrics
     years = (price.index[-1] - price.index[0]).days / 365.25
     total_ret = price["CumReturns"].iloc[-1]
     cagr = (1 + total_ret) ** (1 / years) - 1 if years > 0 else 0
     avg_vol = price["RollingVol"].mean()
-
-    # Correct max drawdown
     price_peak = price["Adj Close"].cummax()
     drawdown = (price_peak - price["Adj Close"]) / price_peak
     max_dd = drawdown.max()
@@ -133,17 +117,13 @@ if st.button("Analyze", type="primary"):
     col3.metric("Avg. volatility", f"{avg_vol:.1%}")
     col4.metric("Max drawdown", f"-{max_dd:.1%}")
 
-    # Row 2: Benchmark relative metrics
     if benchmark_price is not None and bench_cum_daily is not None:
         bench_cum_final = bench_cum_daily.iloc[-1]
         total_relative = total_ret - bench_cum_final
         annual_relative = total_relative / years
-
-        # Correlation and Beta
         main_rets = price["Returns"].dropna()
         bench_rets = benchmark_price["Returns"].dropna()
         common_idx = main_rets.index.intersection(bench_rets.index)
-
         corr = beta = None
         if len(common_idx) > 30:
             common_main = main_rets.loc[common_idx]
