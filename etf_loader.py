@@ -29,29 +29,37 @@ def load_info_data(ticker: str) -> Dict[str, Any]:
     return yf.Ticker(ticker).info
 
 
-@st.cache_data(ttl=86400*30, max_entries=1000)  # 30 days
-def load_etfs(tickers: List[str], period="max", interval="1d") -> Dict[str, Dict[str, Any]]:
-    """EMERGENCY BULLETPROOF VERSION."""
+@st.cache_data(ttl=86400 * 7, hash_funcs={pd.DataFrame: id}, max_entries=500)
+def load_etfs(tickers: List[str], period="max", interval="1d", max_retries=3) -> Dict[str, Dict[str, Any]]:
+    """Bulletproof loader with retries + fallbacks."""
     results = {}
+
     for ticker in tickers:
-        try:
-            # Triple retry with verbose logging
-            for attempt in range(3):
-                try:
-                    df = yf.download(ticker, period=period, progress=False, threads=False)
-                    info = yf.Ticker(ticker).info
-                    if not df.empty and info:
-                        results[ticker] = {"prices": df, "info": info}
-                        st.sidebar.success(f"✅ {ticker}")
-                        break
-                    else:
-                        raise ValueError("Empty data")
-                except:
-                    if attempt == 2:
-                        results[ticker] = {"prices": pd.DataFrame(), "info": {}}
-                        st.sidebar.error(f"❌ {ticker}")
-                    time.sleep(1)
-        except Exception as e:
-            st.sidebar.error(f"💥 {ticker}: {e}")
-            results[ticker] = {"prices": pd.DataFrame(), "info": {}}
+        for attempt in range(max_retries):
+            try:
+                print(f"📥 [{attempt + 1}/{max_retries}] Downloading: {ticker}")
+
+                # Price data with retry
+                price_df = load_price_data(ticker, period, interval)
+                if price_df.empty:
+                    raise Exception("Empty price data")
+
+                # Info data with retry
+                info_dict = load_info_data(ticker)
+
+                results[ticker] = {"prices": price_df, "info": info_dict}
+                break  # Success!
+
+            except Exception as e:
+                print(f"⚠️ Attempt {attempt + 1} failed for {ticker}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                else:
+                    # Fallback: empty but valid structure
+                    print(f"❌ {ticker} FAILED - using fallback")
+                    results[ticker] = {
+                        "prices": pd.DataFrame(),
+                        "info": {"quoteType": "unknown"}
+                    }
+
     return results
