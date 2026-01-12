@@ -35,7 +35,7 @@ def cumulative_performance(prices: pd.Series) -> pd.Series:
     return cum_returns
 
 # -------------------------- Analyze multiple tickers -------------------
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
 def analyze_tickers(tickers: List[str], period: str = "5y", risk_free_rate: float = 0.0):
     """Cached analysis using shared etf_loader cache."""
     etf_data = load_etfs(tickers, period=period)  # Uses cached loader

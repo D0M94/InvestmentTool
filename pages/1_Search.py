@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 import time
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
 def cached_yf_search(keyword: str) -> list:
     """Cached yfinance search."""
     time.sleep(0.2)
@@ -12,7 +12,7 @@ def cached_yf_search(keyword: str) -> list:
     except:
         return []
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
 def cached_ticker_info(ticker: str) -> dict:
     """Cached ticker info."""
     time.sleep(0.2)

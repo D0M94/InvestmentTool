@@ -1,4 +1,16 @@
 import streamlit as st
+# 🔍 PUBLIC STATUS MONITOR (add after imports in app.py)
+with st.sidebar:
+    st.markdown("### 🟢 Connection Status")
+    try:
+        import yfinance as yf
+        test_info = yf.Ticker("SPY").info
+        if test_info:
+            st.sidebar.success("✅ Live data: OK")
+        else:
+            st.sidebar.warning("⚠️ Cache mode")
+    except:
+        st.sidebar.info("💾 Using cached data")
 
 st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
 

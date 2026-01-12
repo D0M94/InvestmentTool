@@ -25,7 +25,7 @@ def safe_scalar(x):
 
 
 # -------------------------- Cached yfinance calls ---------------------
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
 def get_cached_holdings(ticker: str) -> pd.DataFrame:
     """Cached ETF holdings - called ONCE per ticker lifetime."""
     time.sleep(0.2)  # Conservative rate limiting
@@ -39,7 +39,7 @@ def get_cached_holdings(ticker: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
 def get_cached_stock_info(ticker: str) -> Dict[str, Any]:
     """Cached individual stock info."""
     time.sleep(0.1)
