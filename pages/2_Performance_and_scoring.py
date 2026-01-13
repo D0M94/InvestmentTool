@@ -1,3 +1,4 @@
+2_Performance_and_scoring.py:
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -34,9 +35,8 @@ def highlight_benchmark(row):
 
 if st.button("Analyze"):
     with st.spinner("🔄 Computing scores & performance..."):
-        # 🔥 FIXED: Single load_etfs call (eliminates nested caching)
-        all_tickers_list = tickers + ([benchmark] if benchmark not in tickers else [])
-        etf_data = load_etfs(all_tickers_list, period=period)
+        # SINGLE CACHED LOAD for ALL analysis (CRITICAL FIX)
+        etf_data = load_etfs(tickers + ([benchmark] if benchmark not in tickers else []), period=period)
 
         # Scoring (tickers only)
         factor_df = compute_factors({t: etf_data[t] for t in tickers if t in etf_data}, period=period)
