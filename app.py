@@ -1,43 +1,18 @@
 import streamlit as st
-import yfinance as yf
-from pathlib import Path
-import os
-import shutil
-
-# 🔧 CACHE BUSTER (SIDEBAR ONLY)
-def clear_all_cache():
-    cache_dir = Path(".cache")
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-    st.cache_data.clear()
-    st.success("🧹 Cache cleared! Refresh page.")
-    st.rerun()
-
-st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
-
-# 🔍 STATUS + CACHE CONTROLS (SIDEBAR ONLY)
+# 🔍 PUBLIC STATUS MONITOR (add after imports in app.py)
 with st.sidebar:
     st.markdown("### 🟢 Connection Status")
-    
-    if st.button("🗑️ Clear All Cache"):
-        import shutil
-        shutil.rmtree(".cache", ignore_errors=True)
-        st.cache_data.clear()
-        st.success("🧹 Cache cleared!")
-        st.rerun()
-    
-    st.session_state.force_fresh = st.toggle("Force fresh data", value=False)
-    
-    # Test connection
     try:
-        test_price = yf.Ticker("SPY").history(period="5d")
-        if len(test_price) > 0:
-            st.success(f"✅ yfinance OK ({len(test_price)} rows)")
+        import yfinance as yf
+        test_info = yf.Ticker("SPY").info
+        if test_info:
+            st.sidebar.success("✅ Live data: OK")
         else:
-            st.error("❌ Empty data")
+            st.sidebar.warning("⚠️ Cache mode")
     except:
-        st.error("💥 Network error")
+        st.sidebar.info("💾 Using cached data")
 
+st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
 
 st.title("📊 Smart Money Tool: Find Winners & Beat Benchmarks")
 col1, col2 = st.columns([4, 1])
@@ -47,17 +22,15 @@ with col2:
     st.button("⭐ Love it?", key="love")
 
 if st.button("💡 Quick Feedback (30 sec)"):
-    st.text_area("What rocks? What sucks? Would you pay $10/mo?")
+    st.text_area("What rocks? What sucks? Would you pay $10/mo for insights, more models, portfolio builder, etc.?")
 
 st.markdown("""
 **Unlock your investment potential with Dom's Smart Money Tool.**  
 *Find the best assets to your portfolio. Invest like the pros.*
 
-**Sidebar navigation:**
-- 🔍 **Search** — Find assets  
-- 📊 **Performance & scoring** — Compare portfolios  
-- 📈 **Single asset** — Deep analysis
-""")
+Use the sidebar to navigate:
 
-# 🔧 PAGE NAVIGATION (Add your existing page logic here)
-# Your existing multi-page code goes here...
+🔍 **Search** — Find the assets you want to analyze  
+📊 **Performance and scoring** — Compare and rank chosen assets  
+📈 **Single asset analysis** — Deep-dive view of single assets
+""")
