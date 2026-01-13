@@ -1,23 +1,24 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import time
 
-@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
-def cached_yf_search(keyword: str) -> list:
-    """Cached yfinance search."""
-    time.sleep(0.2)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=100)
+def cached_yf_search(_keyword_hash: str) -> list:
+    """Hash-based search caching."""
+    import hashlib
+    keyword_hash = hashlib.md5(_keyword_hash.encode()).hexdigest()
     try:
-        return yf.Search(keyword, max_results=20).search().quotes
+        return yf.Search(_keyword_hash, max_results=20).search().quotes
     except:
         return []
 
-@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
-def cached_ticker_info(ticker: str) -> dict:
-    """Cached ticker info."""
-    time.sleep(0.2)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=200)
+def cached_ticker_info(_ticker_hash: str) -> dict:
+    """Hash-based ticker info caching."""
+    import hashlib
+    ticker_hash = hashlib.md5(_ticker_hash.encode()).hexdigest()
     try:
-        return yf.Ticker(ticker).info
+        return yf.Ticker(_ticker_hash).info or {}
     except:
         return {}
 
