@@ -5,4 +5,5 @@ pandas
 plotly
 numpy
 requests
+appdirs
 
