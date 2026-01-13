@@ -76,4 +76,53 @@ if st.button("Analyze", type="primary"):
         # Scoring (tickers only - exclude benchmark)
         scoring_data = {t: etf_data[t] for t in tickers if t in etf_data}
         factor_df = compute_factors(scoring_data, period=period)
-        scorecard = create_scorecard(factor
+        scorecard = create_scorecard(factor_df)
+        
+        numeric_cols = scorecard.select_dtypes(include=['number']).columns
+        styled_scorecard = scorecard.style.format({col: "{:.2f}" for col in numeric_cols}).apply(highlight_benchmark, axis=1)
+
+        st.subheader("Asset Scorecard")
+        st.dataframe(styled_scorecard, use_container_width=True, hide_index=False)
+
+        # ✅ RESTORED: Performance analysis (all tickers + benchmark)
+        all_tickers = list(set(tickers + [benchmark]))
+        cum_df, metrics = analyze_tickers(all_tickers, period=period, risk_free_rate=risk_free_rate)
+
+        st.subheader("Cumulative Performance")
+        fig = go.Figure()
+        for t in tickers:
+            if t in cum_df.columns:
+                fig.add_trace(go.Scatter(
+                    x=cum_df.index, y=cum_df[t],
+                    mode="lines", name=t,
+                    line=dict(width=1.5)
+                ))
+        if benchmark in cum_df.columns:
+            fig.add_trace(go.Scatter(
+                x=cum_df.index, y=cum_df[benchmark],
+                mode="lines", name=f"benchmark ({benchmark})",
+                line=dict(width=1.5, dash="dash", color="#FFC39B")
+            ))
+        fig.update_yaxes(tickformat=".1%")
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("Performance Metrics")
+        df = pd.DataFrame(metrics).T
+        pct_cols = ["Total Return", "Annual Return", "Annual Volatility"]
+        for col in pct_cols:
+            if col in df.columns:
+                df[col] = df[col] * 100
+
+        # Move benchmark to bottom
+        if benchmark in df.index:
+            benchmark_row = df.loc[benchmark].copy()
+            main_df = df.drop(benchmark).copy()
+            df = pd.concat([main_df, benchmark_row.to_frame().T])
+
+        styled_df = df.style.format({
+            "Total Return": "{:.1f}%",
+            "Annual Return": "{:.1f}%",
+            "Annual Volatility": "{:.1f}%",
+            "Sharpe Ratio": "{:.2f}"
+        }).apply(highlight_benchmark, axis=1)
+        st.dataframe(styled_df, use_container_width=True)
