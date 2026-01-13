@@ -2,54 +2,66 @@ import streamlit as st
 import yfinance as yf
 from pathlib import Path
 import os
+import shutil
 
-# 🔧 FORCE REGENERATE CACHE BUTTON (CRITICAL)
-CACHE_DIR = Path(".cache")
-if st.sidebar.button("🗑️ **CLEAR ALL CACHE** (Fix empty data)"):
-    if CACHE_DIR.exists():
-        import shutil
-        shutil.rmtree(CACHE_DIR)
+# 🔧 CACHE BUSTER (SIDEBAR ONLY)
+def clear_all_cache():
+    cache_dir = Path(".cache")
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
     st.cache_data.clear()
     st.success("🧹 Cache cleared! Refresh page.")
     st.rerun()
 
-# 🔧 YFINANCE CACHE DIR
-CACHE_DIR.mkdir(exist_ok=True)
-os.environ['YFINANCE_CACHE_DIR'] = str(CACHE_DIR / 'yfinance')
+st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
 
-# 🔍 STATUS WITH CACHE DEBUG
+# 🔍 STATUS + CACHE CONTROLS (SIDEBAR)
 with st.sidebar:
     st.markdown("### 🟢 Connection Status")
-    cache_status = st.sidebar.radio("Cache mode:", ["Auto", "Force fresh data"], horizontal=True)
-    force_fresh = cache_status == "Force fresh data"
     
+    # Cache controls
+    col1, col2 = st.columns(2)
+    if col1.button("🗑️ Clear Cache", use_container_width=True):
+        clear_all_cache()
+    
+    cache_mode = st.radio("Data mode:", ["📡 Live", "💾 Cached"], horizontal=True, key="cache_mode")
+    st.session_state.force_fresh = (cache_mode == "📡 Live")
+    
+    # Test connection
     try:
         test_ticker = yf.Ticker("SPY")
-        test_info = test_ticker.info
         test_price = test_ticker.history(period="5d")
-        
-        if test_price.empty:
-            st.sidebar.error("❌ yfinance returning EMPTY data")
-            st.sidebar.info("👆 Click CLEAR CACHE above")
-        elif test_info:
-            st.sidebar.success("✅ Live data: OK")
+        if not test_price.empty:
+            st.success("✅ yfinance: LIVE ✓")
+            st.caption(f"Sample: {len(test_price)} days")
         else:
-            st.sidebar.warning("⚠️ Partial data")
-            
-        st.sidebar.metric("Cache size", f"{len(list(CACHE_DIR.glob('**/*')))} files")
-            
+            st.error("❌ Empty data detected")
+            st.info("👆 Clear cache above")
     except Exception as e:
-        st.sidebar.error(f"💥 Network error: {str(e)[:100]}")
-        st.sidebar.info("🗑️ Clear cache & retry")
+        st.error(f"💥 Network: {str(e)[:50]}")
+    
+    st.divider()
+    st.markdown("---")
 
-# 🔧 PASS FORCE FRESH TO ALL PAGES
-if "force_fresh_data" not in st.session_state:
-    st.session_state.force_fresh_data = force_fresh
+st.title("📊 Smart Money Tool: Find Winners & Beat Benchmarks")
+col1, col2 = st.columns([4, 1])
+with col1:
+    st.caption("⭐ Dom's Smart Money Tools - Built for serious investors")
+with col2:
+    st.button("⭐ Love it?", key="love")
 
-st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
-# ... rest of your app.py unchanged ...
-# Add this temporarily to test
-if st.checkbox("🧪 Test yfinance NOW"):
-    test_data = load_etfs(["SPY"], period="1mo")
-    st.write("SPY data rows:", len(test_data["SPY"]["prices"]))
-    st.dataframe(test_data["SPY"]["prices"].head())
+if st.button("💡 Quick Feedback (30 sec)"):
+    st.text_area("What rocks? What sucks? Would you pay $10/mo?")
+
+st.markdown("""
+**Unlock your investment potential with Dom's Smart Money Tool.**  
+*Find the best assets to your portfolio. Invest like the pros.*
+
+**Sidebar navigation:**
+- 🔍 **Search** — Find assets  
+- 📊 **Performance & scoring** — Compare portfolios  
+- 📈 **Single asset** — Deep analysis
+""")
+
+# 🔧 PAGE NAVIGATION (Add your existing page logic here)
+# Your existing multi-page code goes here...
