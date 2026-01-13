@@ -15,33 +15,29 @@ def clear_all_cache():
 
 st.set_page_config(page_title="Dom's Analytics Platform", layout="wide")
 
-# 🔍 STATUS + CACHE CONTROLS (SIDEBAR)
+# 🔍 STATUS + CACHE CONTROLS (SIDEBAR ONLY)
 with st.sidebar:
     st.markdown("### 🟢 Connection Status")
     
-    # Cache controls
-    col1, col2 = st.columns(2)
-    if col1.button("🗑️ Clear Cache", use_container_width=True):
-        clear_all_cache()
+    if st.button("🗑️ Clear All Cache"):
+        import shutil
+        shutil.rmtree(".cache", ignore_errors=True)
+        st.cache_data.clear()
+        st.success("🧹 Cache cleared!")
+        st.rerun()
     
-    cache_mode = st.radio("Data mode:", ["📡 Live", "💾 Cached"], horizontal=True, key="cache_mode")
-    st.session_state.force_fresh = (cache_mode == "📡 Live")
+    st.session_state.force_fresh = st.toggle("Force fresh data", value=False)
     
     # Test connection
     try:
-        test_ticker = yf.Ticker("SPY")
-        test_price = test_ticker.history(period="5d")
-        if not test_price.empty:
-            st.success("✅ yfinance: LIVE ✓")
-            st.caption(f"Sample: {len(test_price)} days")
+        test_price = yf.Ticker("SPY").history(period="5d")
+        if len(test_price) > 0:
+            st.success(f"✅ yfinance OK ({len(test_price)} rows)")
         else:
-            st.error("❌ Empty data detected")
-            st.info("👆 Clear cache above")
-    except Exception as e:
-        st.error(f"💥 Network: {str(e)[:50]}")
-    
-    st.divider()
-    st.markdown("---")
+            st.error("❌ Empty data")
+    except:
+        st.error("💥 Network error")
+
 
 st.title("📊 Smart Money Tool: Find Winners & Beat Benchmarks")
 col1, col2 = st.columns([4, 1])
