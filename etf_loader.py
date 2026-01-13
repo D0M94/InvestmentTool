@@ -1,48 +1,46 @@
 import yfinance as yf
 import pandas as pd
-from typing import List, Dict
-import streamlit as st
-import numpy as np
+from typing import List, Dict, Any
+import time
 
-@st.cache_data(ttl=3600, show_spinner=False, max_entries=50)
-def load_etfs(tickers: List[str], period="max", interval="1d") -> Dict[str, Dict]:
-    """🔥 BULLETPROOF - Never returns empty cache"""
+def load_etfs(tickers: List[str], period="max", interval="1d", max_retries=3) -> Dict[str, Dict[str, Any]]:
+    """Your original loader - NOW SEQUENTIAL (no rate limits)"""
     results = {}
-    
-    for ticker in tickers:
-        data_valid = False
-        
-        for attempt in range(3):
+
+    for i, ticker in enumerate(tickers):
+        # 🔥 SEQUENTIAL: 200ms between tickers (Yahoo safe)
+        if i > 0:
+            time.sleep(0.2)
+            
+        for attempt in range(max_retries):
             try:
-                t = yf.Ticker(ticker)
-                hist = t.history(period=period, interval=interval, prepost=False)
-                
-                if (not hist.empty and len(hist) >= 10 and 
-                    'Close' in hist.columns and hist['Close'].count() >= 5):
-                    
-                    hist = hist[['Open', 'High', 'Low', 'Close', 'Volume']].reset_index()
-                    hist.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-                    hist['Date'] = pd.to_datetime(hist['Date'])
-                    
+                print(f"📥 [{i+1}/{len(tickers)}] {ticker}")
+
+                # Single sequential call per ticker
+                price_df = yf.download(
+                    ticker,
+                    period=period,
+                    interval=interval,
+                    auto_adjust=False,
+                    progress=False,
+                    threads=False  # Single thread
+                )
+                if price_df.empty:
+                    raise Exception("Empty price data")
+
+                info_dict = yf.Ticker(ticker).info
+
+                results[ticker] = {"prices": price_df, "info": info_dict}
+                break
+
+            except Exception as e:
+                print(f"⚠️ Attempt {attempt + 1} failed for {ticker}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                else:
                     results[ticker] = {
-                        "prices": hist,
-                        "info": getattr(t, 'info', {})
+                        "prices": pd.DataFrame(),
+                        "info": {"quoteType": "unknown"}
                     }
-                    data_valid = True
-                    break
-                
-            except Exception:
-                continue
-        
-        if not data_valid:
-            results[ticker] = {
-                "prices": pd.DataFrame({
-                    'Date': [pd.Timestamp.now()], 
-                    'Open': [np.nan], 'High': [np.nan], 
-                    'Low': [np.nan], 'Close': [np.nan], 
-                    'Volume': [0]
-                }),
-                "info": {'quoteType': 'failed'}
-            }
-    
+
     return results
