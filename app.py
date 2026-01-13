@@ -1,4 +1,3 @@
-app.py:
 import streamlit as st
 # 🔍 PUBLIC STATUS MONITOR (add after imports in app.py)
 with st.sidebar:
