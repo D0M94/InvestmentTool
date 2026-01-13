@@ -1,4 +1,3 @@
-screener_engine_v2.py
 import pandas as pd
 import numpy as np
 
