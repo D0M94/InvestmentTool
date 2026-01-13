@@ -4,44 +4,7 @@ import plotly.graph_objects as go
 from etf_loader import load_etfs
 from factor_engine_v2 import compute_factors
 from screener_engine_v2 import create_scorecard
-
-# 🔧 BUILT-IN PERFORMANCE ANALYZER (No external dependency)
-def analyze_tickers(tickers: list, period: str, risk_free_rate: float = 0.02):
-    """Compute performance metrics + cumulative returns from price data"""
-    cum_returns = pd.DataFrame()
-    metrics = {}
-    
-    for ticker in tickers:
-        try:
-            # Load fresh data for this ticker
-            data = load_etfs([ticker], period=period)
-            if ticker in data and not data[ticker]["prices"].empty:
-                prices = data[ticker]["prices"].set_index('Date')['Close']
-                prices = prices.dropna()
-                
-                if len(prices) > 1:
-                    returns = prices.pct_change().dropna()
-                    cum_ret = (1 + returns).cumprod() - 1
-                    years = (prices.index[-1] - prices.index[0]).days / 365.25
-                    
-                    cum_returns[ticker] = cum_ret
-                    
-                    # Performance metrics
-                    total_return = cum_ret.iloc[-1]
-                    annual_return = (1 + total_return) ** (1/years) - 1 if years > 0 else 0
-                    annual_vol = returns.std() * np.sqrt(252)
-                    sharpe = (annual_return - risk_free_rate) / annual_vol if annual_vol > 0 else 0
-                    
-                    metrics[ticker] = {
-                        'Total Return': total_return,
-                        'Annual Return': annual_return,
-                        'Annual Volatility': annual_vol,
-                        'Sharpe Ratio': sharpe
-                    }
-        except:
-            pass  # Skip failed tickers
-    
-    return cum_returns, metrics
+from performance_analyzer import analyze_tickers
 
 st.title("📊 Asset Scoring & Performance Comparison")
 
@@ -62,29 +25,30 @@ except:
     st.error("Please enter a valid percentage, e.g., 2.00%")
     st.stop()
 
+
 def highlight_benchmark(row):
     if row.name == benchmark:
         return ['background-color: #FFC39B'] * len(row)
     return [''] * len(row)
 
-if st.button("Analyze", type="primary"):
-    with st.spinner("🔄 Computing scores & performance..."):
-        # ✅ FIXED: Single cached load for ALL analysis
-        all_tickers = tickers + ([benchmark] if benchmark not in tickers else [])
-        etf_data = load_etfs(all_tickers, period=period)
 
-        # Scoring (tickers only - exclude benchmark)
-        scoring_data = {t: etf_data[t] for t in tickers if t in etf_data}
-        factor_df = compute_factors(scoring_data, period=period)
+if st.button("Analyze"):
+    with st.spinner("🔄 Computing scores & performance..."):
+        # 🔥 FIXED: Single load_etfs call (eliminates nested caching)
+        all_tickers_list = tickers + ([benchmark] if benchmark not in tickers else [])
+        etf_data = load_etfs(all_tickers_list, period=period)
+
+        # Scoring (tickers only)
+        factor_df = compute_factors({t: etf_data[t] for t in tickers if t in etf_data}, period=period)
         scorecard = create_scorecard(factor_df)
-        
         numeric_cols = scorecard.select_dtypes(include=['number']).columns
-        styled_scorecard = scorecard.style.format({col: "{:.2f}" for col in numeric_cols}).apply(highlight_benchmark, axis=1)
+        styled_scorecard = scorecard.style.format({col: "{:.2f}" for col in numeric_cols}).apply(highlight_benchmark,
+                                                                                                 axis=1)
 
         st.subheader("Asset Scorecard")
         st.dataframe(styled_scorecard, use_container_width=True, hide_index=False)
 
-        # ✅ RESTORED: Performance analysis (all tickers + benchmark)
+        # Performance (all tickers + benchmark)
         all_tickers = list(set(tickers + [benchmark]))
         cum_df, metrics = analyze_tickers(all_tickers, period=period, risk_free_rate=risk_free_rate)
 
@@ -113,7 +77,6 @@ if st.button("Analyze", type="primary"):
             if col in df.columns:
                 df[col] = df[col] * 100
 
-        # Move benchmark to bottom
         if benchmark in df.index:
             benchmark_row = df.loc[benchmark].copy()
             main_df = df.drop(benchmark).copy()
