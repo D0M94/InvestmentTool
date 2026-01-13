@@ -1,9 +1,17 @@
 import streamlit as st
-# 🔍 PUBLIC STATUS MONITOR (add after imports in app.py)
+import yfinance as yf
+from pathlib import Path
+import appdirs as ad
+
+# 🔧 FIX YFINANCE CACHE DIR (CRITICAL FOR STREAMLIT CLOUD)
+CACHE_DIR = ".cache"
+ad.user_cache_dir = lambda *args: CACHE_DIR
+Path(CACHE_DIR).mkdir(exist_ok=True)
+
+# 🔍 PUBLIC STATUS MONITOR
 with st.sidebar:
     st.markdown("### 🟢 Connection Status")
     try:
-        import yfinance as yf
         test_info = yf.Ticker("SPY").info
         if test_info:
             st.sidebar.success("✅ Live data: OK")
@@ -23,7 +31,7 @@ with col2:
 
 if st.button("💡 Quick Feedback (30 sec)"):
     st.text_area("What rocks? What sucks? Would you pay $10/mo for insights, more models, portfolio builder, etc.?")
-
+    
 st.markdown("""
 **Unlock your investment potential with Dom's Smart Money Tool.**  
 *Find the best assets to your portfolio. Invest like the pros.*
