@@ -25,14 +25,16 @@ except:
     st.error("Please enter a valid percentage, e.g., 2.00%")
     st.stop()
 
+
 def highlight_benchmark(row):
     if row.name == benchmark:
         return ['background-color: #FFC39B'] * len(row)
     return [''] * len(row)
 
+
 if st.button("Analyze"):
     with st.spinner("🔄 Computing scores & performance..."):
-        # 🔥 Uses optimized etf_loader (sequential requests only)
+        # SINGLE CACHED LOAD for ALL analysis (CRITICAL FIX)
         etf_data = load_etfs(tickers + ([benchmark] if benchmark not in tickers else []), period=period)
 
         # Scoring (tickers only)
