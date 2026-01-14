@@ -1,4 +1,3 @@
-# etf_screener_v2.py
 import pandas as pd
 
 # --------------------------
@@ -101,3 +100,5 @@ if __name__ == "__main__":
     print("\n--- Creating Scorecard ---")
     scorecard = create_scorecard(factor_df)
     print(scorecard)
+
+
