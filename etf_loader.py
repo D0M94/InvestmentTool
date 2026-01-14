@@ -1,62 +1,65 @@
 import yfinance as yf
 import pandas as pd
 from typing import List, Dict, Any
+import streamlit as st
+from functools import lru_cache
 import time
-import numpy as np
 
-def load_etfs(tickers: List[str], period="max", interval="1d") -> Dict[str, Dict]:
-    """YOUR ORIGINAL STRUCTURE - SEQUENTIAL REQUESTS (No cache, no rate limits)"""
+
+# Global cache for yfinance data (persists across reruns)
+@st.cache_data(ttl=86400*7, show_spinner=False, max_entries=500)  # 7 days + bigger cache
+def load_price_data(ticker: str, period="max", interval="1d") -> pd.DataFrame:
+    """Download OHLCV + Adj Close for a single ETF with rate limit protection."""
+    time.sleep(0.1)  # Rate limiting
+    df = yf.download(
+        ticker,
+        period=period,
+        interval=interval,
+        auto_adjust=False,
+        progress=False,
+        threads=False  # Single thread to avoid rate limits
+    )
+    return df
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_info_data(ticker: str) -> Dict[str, Any]:
+    """Download ETF metadata with caching."""
+    time.sleep(0.1)  # Rate limiting
+    return yf.Ticker(ticker).info
+
+
+@st.cache_data(ttl=86400 * 7, hash_funcs={pd.DataFrame: id}, max_entries=500)
+def load_etfs(tickers: List[str], period="max", interval="1d", max_retries=3) -> Dict[str, Dict[str, Any]]:
+    """Bulletproof loader with retries + fallbacks."""
     results = {}
-    
-    for i, ticker in enumerate(tickers):
-        # 🔥 SEQUENTIAL: 250ms delay between requests (Yahoo safe)
-        if i > 0:
-            time.sleep(0.25)
-            
-        data_valid = False
-        
-        # Try 3 times with exponential backoff
-        for attempt in range(3):
+
+    for ticker in tickers:
+        for attempt in range(max_retries):
             try:
-                print(f"📥 Loading {ticker} ({i+1}/{len(tickers)}) - attempt {attempt+1}")
-                
-                # Single sequential request per ticker
-                t = yf.Ticker(ticker)
-                hist = t.history(period=period, interval=interval, prepost=False)
-                
-                # Validate data quality
-                if (not hist.empty and 
-                    len(hist) >= 10 and 
-                    'Close' in hist.columns and 
-                    hist['Close'].count() >= 5):
-                    
-                    # Standardize format for your original scripts
-                    hist = hist[['Open', 'High', 'Low', 'Close', 'Volume']].reset_index()
-                    hist.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-                    hist['Date'] = pd.to_datetime(hist['Date'])
-                    
-                    results[ticker] = {
-                        "prices": hist,
-                        "info": getattr(t, 'info', {})
-                    }
-                    data_valid = True
-                    break
-                
+                print(f"📥 [{attempt + 1}/{max_retries}] Downloading: {ticker}")
+
+                # Price data with retry
+                price_df = load_price_data(ticker, period, interval)
+                if price_df.empty:
+                    raise Exception("Empty price data")
+
+                # Info data with retry
+                info_dict = load_info_data(ticker)
+
+                results[ticker] = {"prices": price_df, "info": info_dict}
+                break  # Success!
+
             except Exception as e:
-                print(f"⚠️ {ticker} attempt {attempt+1} failed: {e}")
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
-        
-        # Fallback for failed tickers (your original scripts expect this)
-        if not data_valid:
-            results[ticker] = {
-                "prices": pd.DataFrame({
-                    'Date': [pd.Timestamp.now()], 
-                    'Open': [np.nan], 'High': [np.nan], 
-                    'Low': [np.nan], 'Close': [np.nan], 
-                    'Volume': [0]
-                }),
-                "info": {'quoteType': 'failed'}
-            }
-    
+                print(f"⚠️ Attempt {attempt + 1} failed for {ticker}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                else:
+                    # Fallback: empty but valid structure
+                    print(f"❌ {ticker} FAILED - using fallback")
+                    results[ticker] = {
+                        "prices": pd.DataFrame(),
+                        "info": {"quoteType": "unknown"}
+                    }
+
     return results
