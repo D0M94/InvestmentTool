@@ -14,10 +14,10 @@ st.title("📊 Asset Scoring & Performance Comparison")
 # --- Sidebar / Inputs ---
 col1, col2 = st.columns(2)
 with col1:
-    tickers_input = st.text_input("Enter tickers (comma-separated)", "SPY, QQQ, SMH, IGV, CIBR")
+    tickers_input = st.text_input("Enter tickers (comma-separated)", "QQQ, EEM, VOOG")
     tickers = [t.strip().upper() for t in tickers_input.split(",") if t.strip()]
 with col2:
-    benchmark_input = st.text_input("Benchmark (Baseline for Z-Scores)", "SPY")
+    benchmark_input = st.text_input("Benchmark ", "SPY")
     benchmark = benchmark_input.strip().upper()
 
 period = st.selectbox("History period", ["1y", "2y", "5y", "10y", "max"], index=2)
@@ -49,7 +49,7 @@ if st.button("Analyze"):
         cum_df, metrics = analyze_tickers(all_tickers, period=period, risk_free_rate=risk_free_rate)
 
         # --- SECTION 1: FACTOR DNA SCORECARD (Fixed 2 Decimals) ---
-        st.subheader("🧬 Factor DNA Scorecard")
+        st.subheader("Factor Scorecard")
         st.caption(f"Z-Scores relative to {benchmark}.")
 
         scorecard = create_scorecard(factor_df, is_etf=True, benchmark_ticker=benchmark)
@@ -68,7 +68,7 @@ if st.button("Analyze"):
         )
 
         # --- SECTION 2: CUMULATIVE PERFORMANCE ---
-        st.subheader("📈 Cumulative Performance")
+        st.subheader("Cumulative Performance")
         fig_perf = go.Figure()
         for t in tickers:
             if t in cum_df.columns:
@@ -86,7 +86,7 @@ if st.button("Analyze"):
         st.plotly_chart(fig_perf, use_container_width=True)
 
         # --- SECTION 3: REVERSED BRANDED CORRELATION HEATMAP ---
-        st.subheader("🔗 Factor Synergy: Correlation Matrix")
+        st.subheader("Correlation Matrix")
 
         price_dict = {}
         for t in all_tickers:
@@ -135,7 +135,7 @@ if st.button("Analyze"):
             st.info("Add more tickers to see correlation.")
 
         # --- SECTION 4: PERFORMANCE METRICS (2 DECIMALS) ---
-        st.subheader("📋 Performance Metrics")
+        st.subheader("Performance Metrics")
         metrics_df = pd.DataFrame(metrics).T
 
         pct_cols = ["Total Return", "Annual Return", "Annual Volatility"]
