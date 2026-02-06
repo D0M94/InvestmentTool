@@ -56,3 +56,21 @@ def analyze_tickers(tickers: List[str], period: str = "5y", risk_free_rate: floa
         metrics[ticker] = compute_metrics(prices, risk_free_rate=risk_free_rate)
 
     return cum_df, metrics
+
+
+# -------------------------- Correlation Matrix -----------------------
+def compute_correlation_matrix(prices_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Computes the correlation matrix for a dataframe of prices.
+    Uses daily returns to find how assets move together.
+    """
+    if prices_df.empty:
+        return pd.DataFrame()
+
+    # Calculate daily returns
+    returns = prices_df.pct_change().dropna()
+
+    # Compute Pearson correlation
+    corr_matrix = returns.corr()
+
+    return corr_matrix
