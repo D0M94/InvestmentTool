@@ -138,4 +138,3 @@ if __name__ == "__main__":
     print(scorecard)
     scorecard.to_csv("scorecard.csv")
     print("\n✅ Saved scorecard to 'scorecard.csv'")
->>>>>>> da1d242088e03a6dd54b176969c38280aff13bb7
