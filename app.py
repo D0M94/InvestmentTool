@@ -34,3 +34,4 @@ Use the sidebar to navigate:
 📊 **Performance and scoring** — Compare and rank chosen assets  
 📈 **Single asset analysis** — Deep-dive view of single assets
 """)
+

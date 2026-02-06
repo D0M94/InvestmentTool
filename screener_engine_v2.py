@@ -102,3 +102,40 @@ def create_scorecard(factor_df: pd.DataFrame, is_etf: bool = True, benchmark_tic
     scorecard[numeric_cols] = scorecard[numeric_cols].round(2)
 
     return scorecard
+
+
+# --------------------------
+# Demo / CSV export
+# --------------------------
+if __name__ == "__main__":
+    from etf_loader import load_etfs
+    from factor_engine_v2 import compute_factors
+
+    tickers = ["SPY", "QQQ", "EEM", "VTI"]  # All ETFs for Cost testing
+    data = load_etfs(tickers, period="5y")
+    factor_df = compute_factors(data)
+
+    # 👈 TEST 1: Check raw Cost values
+    print("\n=== RAW COST VALUES ===")
+    print(factor_df[['Ticker', 'Cost', 'info']].head())
+
+    # 👈 TEST 2: Check if Cost column exists and has data
+    print("\n=== COST COLUMN TEST ===")
+    print(f"Cost column exists: {'Cost' in factor_df.columns}")
+    print(f"Non-NaN Cost values: {factor_df['Cost'].notna().sum()}")
+    print(f"Cost stats:\n{factor_df['Cost'].describe()}")
+
+    # 👈 TEST 3: Check expenseRatio from info
+    print("\n=== EXPENSE RATIO RAW DATA ===")
+    for ticker in tickers:
+        info = factor_df[factor_df['Ticker'] == ticker]['info'].iloc[0]
+        expense = info.get('expenseRatio')
+        print(f"{ticker}: expenseRatio = {expense}")
+
+    scorecard = create_scorecard(factor_df)
+
+    print("\n=== FINAL SCORECARD ===")
+    print(scorecard)
+    scorecard.to_csv("scorecard.csv")
+    print("\n✅ Saved scorecard to 'scorecard.csv'")
+>>>>>>> da1d242088e03a6dd54b176969c38280aff13bb7
